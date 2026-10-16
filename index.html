@@ -18,6 +18,11 @@ button,input[type=text],input[type=number]{font:inherit;color:var(--text);backgr
 button{cursor:pointer}
 button:hover{border-color:var(--acc)}
 .danger{color:#e5484d}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 16px;border-bottom:1px solid var(--line)}
+#now{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.tm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--sub)}
+.tm input{width:64px;padding:6px 8px}
+#tmD{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;min-width:4.5ch}
 .layout{display:grid;gap:16px;padding:16px;max-width:1040px;margin:0 auto;align-items:start}
 @media(min-width:760px){.layout{grid-template-columns:1fr 300px}}
 #grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
@@ -29,6 +34,7 @@ button:hover{border-color:var(--acc)}
 .pad .nm{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere;max-height:2.5em;overflow:hidden}
 .pad .sb{font-size:11px;opacity:.85;margin-top:4px;overflow-wrap:anywhere;max-height:2.2em;overflow:hidden}
 .pad .ky{position:absolute;top:6px;left:8px;font-size:11px;opacity:.7;font-family:monospace}
+.pad .rem{position:absolute;top:6px;right:8px;font-size:11px;font-family:monospace;font-weight:700;opacity:.95}
 .btns{position:absolute;left:6px;right:6px;bottom:6px;display:flex;gap:4px}
 .btns button{flex:1;font-size:13px;line-height:1;padding:6px 0;background:rgba(0,0,0,.25);border:0;color:#fff;border-radius:6px}
 .btns button:hover{border:0;background:rgba(0,0,0,.4)}
@@ -57,6 +63,15 @@ aside input[type=checkbox]{accent-color:var(--acc)}
   <button id="stopAll">■ 全停止</button>
   <button id="reset" class="danger">全消去</button>
 </header>
+<div class="bar">
+  <div id="now">--:--:--</div>
+  <div class="tm">
+    <input type="number" id="tmM" min="0" max="999" value="5" inputmode="numeric">分
+    <input type="number" id="tmS" min="0" max="59" value="0" inputmode="numeric">秒
+    <span id="tmD">05:00</span>
+    <button id="tmGo">開始</button><button id="tmRs">リセット</button>
+  </div>
+</div>
 
 <div class="layout">
   <div id="grid"></div>
@@ -84,6 +99,9 @@ aside input[type=checkbox]{accent-color:var(--acc)}
     <label for="off">再生オフセット（開始位置・秒）</label>
     <input type="number" id="off" min="0" step="0.01" inputmode="decimal">
 
+    <label for="ae">再生自動終了（秒・0で無効）</label>
+    <input type="number" id="ae" min="0" step="0.01" inputmode="decimal">
+
     <label for="fl">音声・動画ファイル</label>
     <input type="file" id="fl" accept="audio/*,video/*">
     <div id="fn"></div>
@@ -108,7 +126,7 @@ const grid=$('grid');
 const urls=new Map(), inst=new Map();
 let pads, db, master=1, cur=-1, ctx=null;
 
-function defPad(i){return{name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,file:'',kind:''}}
+function defPad(i){return{name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:''}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length===16)return s.map((p,i)=>({...defPad(i),...p}))}catch(e){}
   return Array.from({length:16},(_,i)=>defPad(i));
@@ -194,12 +212,14 @@ async function trigger(i){
   },{once:true});
   a.onended=()=>finish(x);
   set.add(x);inst.set(i,set);render(i);
+  if(p.ae>0){x.endAt=Date.now()+p.ae*1000;x.timer=setTimeout(()=>stopInst(x,p.fo),p.ae*1000);}
   try{await a.play()}catch(e){finish(x);toast('再生できませんでした')}
 }
 
 function finish(x){
   const s=inst.get(x.i);
   if(s)s.delete(x);
+  clearTimeout(x.timer);
   try{x.src.disconnect();x.g.disconnect()}catch(e){}
   x.a.pause();
   render(x.i);
@@ -228,6 +248,7 @@ function select(i){
   $('fi').value=p.fi;
   $('fo').value=p.fo;
   $('off').value=p.off;
+  $('ae').value=p.ae;
   $('fl').value='';
   $('fn').textContent=p.file?('現在: '+p.file+(p.kind==='video'?'（動画・音声のみ再生）':'')):'未設定';
   $('sw').innerHTML='';
@@ -250,6 +271,7 @@ $('lp').onchange=()=>{pads[cur].loop=$('lp').checked;save()};
 $('fi').oninput=()=>{pads[cur].fi=num($('fi').value);save()};
 $('fo').oninput=()=>{pads[cur].fo=num($('fo').value);save()};
 $('off').oninput=()=>{pads[cur].off=num($('off').value);save()};
+$('ae').oninput=()=>{pads[cur].ae=num($('ae').value);save()};
 $('fl').onchange=async()=>{
   const f=$('fl').files[0];
   if(!f)return;
@@ -298,7 +320,7 @@ pads=load();
 for(let i=0;i<16;i++){
   const el=document.createElement('div');
   el.className='pad';
-  el.innerHTML='<span class="ky"></span><div class="nm"></div><div class="sb"></div><div class="btns"><button class="pl" aria-label="再生">▶</button><button class="st" aria-label="停止">■</button><button class="gr" aria-label="プロパティ">⚙</button></div>';
+  el.innerHTML='<span class="ky"></span><span class="rem"></span><div class="nm"></div><div class="sb"></div><div class="btns"><button class="pl" aria-label="再生">▶</button><button class="st" aria-label="停止">■</button><button class="gr" aria-label="プロパティ">⚙</button></div>';
   el.querySelector('.ky').textContent=KEYS[i].toUpperCase();
   el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;trigger(i)});
   ['pl','st','gr'].forEach(c=>el.querySelector('.'+c).addEventListener('pointerdown',e=>e.stopPropagation()));
@@ -315,6 +337,42 @@ for(let i=0;i<16;i++){
 })();
 select(0);
 save();
+
+// 自動終了までの残り秒数を表示
+setInterval(()=>{
+  const now=Date.now();
+  [...grid.children].forEach((el,i)=>{
+    let rem=null;
+    inst.get(i)?.forEach(x=>{
+      if(x.endAt&&!x.stopping){const r=(x.endAt-now)/1000;if(rem===null||r<rem)rem=r;}
+    });
+    el.querySelector('.rem').textContent=rem===null?'':'あと '+Math.max(0,rem).toFixed(1)+'秒';
+  });
+},100);
+
+// 時計・タイマー
+const tmM=$('tmM'), tmS=$('tmS'), tmD=$('tmD'), tmGo=$('tmGo');
+let tmLeft=0, tmEnd=0, tmRun=false;
+function tmInit(){if(!tmRun)tmLeft=(+tmM.value||0)*60000+(+tmS.value||0)*1000}
+function tmShow(ms){const s=Math.ceil(ms/1000);tmD.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function beep(){try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.connect(g).connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.8);o.start();o.stop(c.currentTime+0.8)}catch(e){}}
+tmGo.onclick=()=>{
+  if(tmRun){tmLeft=Math.max(0,tmEnd-Date.now());tmRun=false;tmGo.textContent='開始';tmShow(tmLeft);return}
+  if(tmLeft<=0)tmInit();
+  if(tmLeft<=0){toast('時間を設定してください');return}
+  tmEnd=Date.now()+tmLeft;tmRun=true;tmGo.textContent='一時停止';
+};
+$('tmRs').onclick=()=>{tmRun=false;tmLeft=0;tmGo.textContent='開始';tmInit();tmShow(tmLeft)};
+tmM.oninput=tmS.oninput=()=>{if(!tmRun){tmInit();tmShow(tmLeft)}};
+tmInit();tmShow(tmLeft);
+setInterval(()=>{
+  $('now').textContent=new Date().toLocaleTimeString('ja-JP',{hour12:false});
+  if(tmRun){
+    const left=tmEnd-Date.now();
+    if(left<=0){tmRun=false;tmLeft=0;tmGo.textContent='開始';tmShow(0);toast('タイマー終了');beep()}
+    else tmShow(left);
+  }
+},200);
 </script>
 </body>
 </html>
