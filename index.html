@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ポン出しパッド</title>
+<style>
+:root{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f4f5f8;--panel:#ffffff;--line:#d8dce5;--text:#1b1e25;--sub:#6b7280;--acc:#2563eb}}
+:root[data-theme="dark"]{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;min-height:100vh;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0 auto 0 0}
+label.ctl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--sub)}
+button,input[type=text],input[type=number]{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+button{cursor:pointer}
+button:hover{border-color:var(--acc)}
+.danger{color:#e5484d}
+.layout{display:grid;gap:16px;padding:16px;max-width:1040px;margin:0 auto;align-items:start}
+@media(min-width:760px){.layout{grid-template-columns:1fr 300px}}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.pad{position:relative;aspect-ratio:1;border-radius:16px;background:var(--c,var(--panel));border:2px solid var(--line);color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 8px 34px;text-align:center;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;transition:transform .06s,box-shadow .12s;overflow:hidden}
+.pad.full{color:#fff;border-color:transparent}
+.pad:active{transform:scale(.97)}
+.pad.on{box-shadow:0 0 0 3px var(--acc),0 0 18px var(--acc)}
+.pad.sel{outline:2px solid var(--acc);outline-offset:3px}
+.pad .nm{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere;max-height:2.5em;overflow:hidden}
+.pad .sb{font-size:11px;opacity:.85;margin-top:4px;overflow-wrap:anywhere;max-height:2.2em;overflow:hidden}
+.pad .ky{position:absolute;top:6px;left:8px;font-size:11px;opacity:.7;font-family:monospace}
+.btns{position:absolute;left:6px;right:6px;bottom:6px;display:flex;gap:4px}
+.btns button{flex:1;font-size:13px;line-height:1;padding:6px 0;background:rgba(0,0,0,.25);border:0;color:#fff;border-radius:6px}
+.btns button:hover{border:0;background:rgba(0,0,0,.4)}
+.pad:not(.full) .btns button{color:var(--text);background:var(--line)}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+aside h2{font-size:15px;margin:0 0 4px}
+aside .sub{font-size:12px;color:var(--sub);margin-bottom:6px}
+aside label{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
+aside input[type=text],aside input[type=number],aside input[type=file]{width:100%}
+aside input[type=checkbox]{accent-color:var(--acc)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sw{display:flex;gap:8px;flex-wrap:wrap}
+.sw button{width:30px;height:30px;padding:0;border-radius:50%;border:3px solid transparent}
+.sw button.sel{border-color:var(--text)}
+#fn{font-size:12px;color:var(--sub);margin-top:6px;overflow-wrap:anywhere}
+.clrbtn{margin-top:14px;width:100%}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast.show{opacity:1}
+.hint{font-size:12px;color:var(--sub);text-align:center;padding:0 16px 24px;line-height:1.7}
+</style>
+</head>
+<body>
+<header>
+  <h1>ポン出しパッド</h1>
+  <label class="ctl">音量 <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
+  <button id="stopAll">■ 全停止</button>
+  <button id="reset" class="danger">全消去</button>
+</header>
+
+<div class="layout">
+  <div id="grid"></div>
+
+  <aside id="pp">
+    <h2 id="ppt">パッド</h2>
+    <div class="sub" id="pps">パッドの ⚙ で選択</div>
+
+    <label for="nm">名前</label>
+    <input type="text" id="nm" maxlength="30" placeholder="例: 拍手">
+
+    <label>色</label>
+    <div class="sw" id="sw"></div>
+
+    <label for="pv">音量</label>
+    <input type="range" id="pv" min="0" max="1" step="0.01">
+
+    <label><input type="checkbox" id="lp"> ループ再生</label>
+
+    <div class="two">
+      <div><label for="fi">フェードイン（秒）</label><input type="number" id="fi" min="0" max="30" step="0.01" inputmode="decimal"></div>
+      <div><label for="fo">フェードアウト（秒）</label><input type="number" id="fo" min="0" max="30" step="0.01" inputmode="decimal"></div>
+    </div>
+
+    <label for="off">再生オフセット（開始位置・秒）</label>
+    <input type="number" id="off" min="0" step="0.01" inputmode="decimal">
+
+    <label for="fl">音声・動画ファイル</label>
+    <input type="file" id="fl" accept="audio/*,video/*">
+    <div id="fn"></div>
+
+    <button id="clr" class="danger clrbtn">ファイルを消去</button>
+  </aside>
+</div>
+
+<p class="hint">
+  パッド本体タップ or ▶で再生（ループ中は再生ボタンで停止）／ ■ でフェードアウト停止／ ⚙ でプロパティを表示<br>
+  キーボード: 1 2 3 4 / q w e r / a s d f / z x c v、Space で全停止<br>
+  動画ファイルは音声のみ再生します。設定と音声データはこのブラウザ内に保存されます。
+</p>
+<div id="toast"></div>
+
+<script>
+const KEY='ponde-pad:v1', DBN='ponde-pad';
+const COLORS=['#e5484d','#f76b15','#f5a524','#30a46c','#12a594','#0090ff','#6e56cf','#d6409f'];
+const KEYS=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
+const $=id=>document.getElementById(id);
+const grid=$('grid');
+const urls=new Map(), inst=new Map();
+let pads, db, master=1, cur=-1, ctx=null;
+
+function defPad(i){return{name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,file:'',kind:''}}
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length===16)return s.map((p,i)=>({...defPad(i),...p}))}catch(e){}
+  return Array.from({length:16},(_,i)=>defPad(i));
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(pads))}catch(e){toast('設定を保存できませんでした')}}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800)}
+const num=v=>Math.max(0,Math.round((+v||0)*100)/100);
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DBN,1);
+    r.onupgradeneeded=()=>r.result.createObjectStore('files');
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  });
+}
+function tx(mode,fn){
+  return new Promise((res,rej)=>{
+    const t=db.transaction('files',mode);
+    const q=fn(t.objectStore('files'));
+    t.oncomplete=()=>res(q?q.result:undefined);
+    t.onerror=()=>rej(t.error);
+  });
+}
+const getBlob=i=>tx('readonly',s=>s.get(i));
+const putBlob=(i,b)=>tx('readwrite',s=>s.put(b,i));
+const delBlob=i=>tx('readwrite',s=>s.delete(i));
+const clearBlobs=()=>tx('readwrite',s=>s.clear());
+
+async function urlOf(i){
+  if(!urls.has(i)){
+    const b=await getBlob(i);
+    if(!b)return null;
+    urls.set(i,URL.createObjectURL(b));
+  }
+  return urls.get(i);
+}
+function revoke(i){if(urls.has(i)){URL.revokeObjectURL(urls.get(i));urls.delete(i)}}
+
+function ac(){
+  if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state==='suspended')ctx.resume();
+  return ctx;
+}
+
+function render(i){
+  const p=pads[i], el=grid.children[i], full=!!p.file;
+  el.classList.toggle('full',full);
+  if(full)el.style.setProperty('--c',p.color);else el.style.removeProperty('--c');
+  el.querySelector('.nm').textContent=p.name||(full?'(無名)':'空き');
+  el.querySelector('.sb').textContent=full?((p.kind==='video'?'🎬 ':'🔊 ')+p.file):'タップで設定';
+  el.classList.toggle('on',(inst.get(i)?.size||0)>0);
+  el.classList.toggle('sel',i===cur);
+}
+function applyVol(i){
+  const c=ac();
+  inst.get(i)?.forEach(x=>x.g.gain.setTargetAtTime(pads[i].vol*master,c.currentTime,0.02));
+}
+
+async function trigger(i){
+  const p=pads[i];
+  if(!p.file){select(i);return}
+  const set=inst.get(i)||new Set();
+  if(p.loop&&set.size){stopPad(i);return}
+  let url;
+  try{url=await urlOf(i)}catch(e){url=null}
+  if(!url){toast('音声ファイルが見つかりません');return}
+
+  const c=ac();
+  const a=new Audio(url);
+  a.loop=p.loop;
+  const src=c.createMediaElementSource(a);
+  const g=c.createGain();
+  src.connect(g).connect(c.destination);
+
+  const target=p.vol*master, now=c.currentTime;
+  g.gain.setValueAtTime(p.fi>0?0:target,now);
+  if(p.fi>0)g.gain.linearRampToValueAtTime(target,now+p.fi);
+
+  const x={a,g,src,i,stopping:false};
+  a.addEventListener('loadedmetadata',()=>{
+    const o=Math.min(p.off,Math.max(0,a.duration-0.05));
+    if(o>0)a.currentTime=o;
+  },{once:true});
+  a.onended=()=>finish(x);
+  set.add(x);inst.set(i,set);render(i);
+  try{await a.play()}catch(e){finish(x);toast('再生できませんでした')}
+}
+
+function finish(x){
+  const s=inst.get(x.i);
+  if(s)s.delete(x);
+  try{x.src.disconnect();x.g.disconnect()}catch(e){}
+  x.a.pause();
+  render(x.i);
+}
+function stopInst(x,fo){
+  if(x.stopping)return;
+  x.stopping=true;
+  if(!(fo>0)){finish(x);return}
+  const c=ac(), now=c.currentTime;
+  x.g.gain.cancelScheduledValues(now);
+  x.g.gain.setValueAtTime(x.g.gain.value,now);
+  x.g.gain.linearRampToValueAtTime(0,now+fo);
+  setTimeout(()=>finish(x),fo*1000+30);
+}
+function stopPad(i){inst.get(i)?.forEach(x=>stopInst(x,pads[i].fo))}
+function stopAll(){inst.forEach((_,i)=>stopPad(i))}
+
+function select(i){
+  cur=i;
+  const p=pads[i];
+  $('ppt').textContent='パッド '+KEYS[i].toUpperCase()+'（'+(i+1)+'）';
+  $('pps').textContent=p.file?'編集中':'音声未設定。ファイルを選択してください';
+  $('nm').value=p.name;
+  $('pv').value=p.vol;
+  $('lp').checked=p.loop;
+  $('fi').value=p.fi;
+  $('fo').value=p.fo;
+  $('off').value=p.off;
+  $('fl').value='';
+  $('fn').textContent=p.file?('現在: '+p.file+(p.kind==='video'?'（動画・音声のみ再生）':'')):'未設定';
+  $('sw').innerHTML='';
+  COLORS.forEach(c=>{
+    const b=document.createElement('button');
+    b.style.background=c;
+    if(c===p.color)b.classList.add('sel');
+    b.onclick=()=>{
+      pads[cur].color=c;save();render(cur);
+      [...$('sw').children].forEach(x=>x.classList.toggle('sel',x===b));
+    };
+    $('sw').appendChild(b);
+  });
+  [...grid.children].forEach((_,k)=>render(k));
+}
+
+$('nm').oninput=()=>{pads[cur].name=$('nm').value;save();render(cur)};
+$('pv').oninput=()=>{pads[cur].vol=+$('pv').value;save();applyVol(cur)};
+$('lp').onchange=()=>{pads[cur].loop=$('lp').checked;save()};
+$('fi').oninput=()=>{pads[cur].fi=num($('fi').value);save()};
+$('fo').oninput=()=>{pads[cur].fo=num($('fo').value);save()};
+$('off').oninput=()=>{pads[cur].off=num($('off').value);save()};
+$('fl').onchange=async()=>{
+  const f=$('fl').files[0];
+  if(!f)return;
+  const i=cur;
+  try{
+    stopPad(i);
+    await putBlob(i,f);
+    revoke(i);
+    pads[i].file=f.name;
+    pads[i].kind=(f.type.startsWith('video/')||/\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name))?'video':'audio';
+    save();select(i);
+    toast('登録しました');
+  }catch(e){toast('ファイルを保存できませんでした')}
+};
+$('clr').onclick=async()=>{
+  const i=cur;
+  stopPad(i);
+  try{await delBlob(i)}catch(e){}
+  revoke(i);
+  pads[i]={...pads[i],file:'',kind:'',loop:false};
+  save();select(i);
+};
+
+$('master').oninput=e=>{master=+e.target.value;inst.forEach((_,i)=>applyVol(i))};
+$('stopAll').onclick=stopAll;
+$('reset').onclick=async()=>{
+  if(!confirm('全パッドの設定と音声ファイルを消去しますか？'))return;
+  stopAll();
+  urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
+  try{await clearBlobs()}catch(e){}
+  localStorage.removeItem(KEY);
+  pads=Array.from({length:16},(_,i)=>defPad(i));
+  select(0);
+  toast('消去しました');
+};
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.target.matches&&e.target.matches('input,textarea,select'))return;
+  if(e.code==='Space'){e.preventDefault();stopAll();return}
+  const i=KEYS.indexOf(e.key.toLowerCase());
+  if(i>=0&&!e.repeat)trigger(i);
+});
+
+pads=load();
+for(let i=0;i<16;i++){
+  const el=document.createElement('div');
+  el.className='pad';
+  el.innerHTML='<span class="ky"></span><div class="nm"></div><div class="sb"></div><div class="btns"><button class="pl" aria-label="再生">▶</button><button class="st" aria-label="停止">■</button><button class="gr" aria-label="プロパティ">⚙</button></div>';
+  el.querySelector('.ky').textContent=KEYS[i].toUpperCase();
+  el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;trigger(i)});
+  ['pl','st','gr'].forEach(c=>el.querySelector('.'+c).addEventListener('pointerdown',e=>e.stopPropagation()));
+  el.querySelector('.pl').addEventListener('click',()=>trigger(i));
+  el.querySelector('.st').addEventListener('click',()=>stopPad(i));
+  el.querySelector('.gr').addEventListener('click',()=>select(i));
+  grid.appendChild(el);
+}
+(async()=>{
+  try{
+    db=await openDB();
+    for(let i=0;i<16;i++){if(pads[i].file){try{await urlOf(i)}catch(e){}}}
+  }catch(e){toast('音声データの保存機能が使えません')}
+})();
+select(0);
+save();
+</script>
+</body>
+</html>
