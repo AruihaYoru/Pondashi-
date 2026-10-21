@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Font Crosshatch Converter</title>
 
-    <!-- フォント読み込み・書き出し -->
+    <!-- フォントの読み込み・書き出し -->
     <script src="https://unpkg.com/opentype.js@2.0.0/dist/opentype.js"></script>
     <!-- 輪郭どうしの交差計算（文字 ∩ 斜線）に使用 -->
     <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.min.js"></script>
@@ -72,6 +72,7 @@
             padding: 20px;
             background: #fff;
         }
+        #preview-note { font-size: 13px; color: #888; margin-top: 8px; }
     </style>
 </head>
 <body>
@@ -103,10 +104,12 @@
     <div class="card" id="result-card" style="display:none;">
         <a id="download-link" href="#" download>OTFをダウンロード</a>
         <div id="preview">亜あア①克ロ</div>
+        <div id="preview-note"></div>
     </div>
 
 <script>
-const SCALE = 10; // Clipper は整数座標が必要なので、小数を保つため拡大する
+const SCALE = 10;                    // Clipper は整数座標が必要なので小数を保つため拡大
+const PREVIEW_MAX_BYTES = 15 * 1024 * 1024;  // これより大きい場合はプレビューを省略
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -127,10 +130,9 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ---------- JIS第一水準などの対象文字を自動生成 ----------
-// Shift_JIS の行構成を利用する：
-//   0x88〜0x9F のリード바이트 = JIS X 0208 の第一水準漢字（16〜47区）
-//   0x81 = 記号、0x82 = 全角英数・ひらがな、0x83 = カタカナ
+// ---------- 対象文字の自動生成（Shift_JIS の行構成を利用） ----------
+// リードバイト 0x88〜0x9F = JIS X 0208 第一水準漢字（16〜47区）
+// 0x81 = 記号、0x82 = 全角英数・ひらがな、0x83 = カタカナ
 function buildTargetChars() {
     const dec = new TextDecoder('shift_jis');
     const leads = [0x81, 0x82, 0x83];
@@ -154,6 +156,10 @@ function buildTargetChars() {
 }
 
 // ---------- パス → ポリゴン（曲線は直線に分割） ----------
+// 分割数は少なめにして、メモリ使用量を抑える
+const Q_STEPS = 4;
+const C_STEPS = 6;
+
 function pathToRings(path) {
     const rings = [];
     let cur = null;
@@ -170,8 +176,8 @@ function pathToRings(path) {
             cx = c.x; cy = c.y;
         } else if (c.type === 'Q') {
             if (!cur) continue;
-            for (let k = 1; k <= 8; k++) {
-                const t = k / 8, mt = 1 - t;
+            for (let k = 1; k <= Q_STEPS; k++) {
+                const t = k / Q_STEPS, mt = 1 - t;
                 cur.push({
                     x: mt * mt * cx + 2 * mt * t * c.x1 + t * t * c.x,
                     y: mt * mt * cy + 2 * mt * t * c.y1 + t * t * c.y
@@ -180,8 +186,8 @@ function pathToRings(path) {
             cx = c.x; cy = c.y;
         } else if (c.type === 'C') {
             if (!cur) continue;
-            for (let k = 1; k <= 10; k++) {
-                const t = k / 10, mt = 1 - t;
+            for (let k = 1; k <= C_STEPS; k++) {
+                const t = k / C_STEPS, mt = 1 - t;
                 const a = mt * mt * mt, b = 3 * mt * mt * t, d = 3 * mt * t * t, e = t * t * t;
                 cur.push({
                     x: a * cx + b * c.x1 + d * c.x2 + e * c.x,
@@ -196,33 +202,33 @@ function pathToRings(path) {
     return rings.filter(r => r.length >= 3);
 }
 
-function ringsToClipper(rings) {
-    return rings.map(r => r.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) })));
+function ringToClipper(ring) {
+    return ring.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) }));
 }
 
 // ---------- 斜線の生成（全グリフ共通なので一度だけ作る） ----------
-// 密度の考え方：
-//   目標カバー率 C は上端で 1.0、下端で 0.2 に線形変化させる。
-//   斜線は2方向（/ と \）を重ねるので、1方向あたりの被覆率 c は
-//   1 - (1 - c)^2 = C を満たすように c = 1 - sqrt(1 - C) とする。
-//   各斜線の幅を y に応じて変えることで、上ほど太く・下ほど細くなる。
-function buildHatchClip(font) {
+// 目標カバー率 C は上端 1.0、下端 0.2 に線形変化。
+// 斜線は2方向を重ねるので、1方向あたりの被覆率 c は 1 - (1 - c)^2 = C を満たすように決める。
+// 各斜線の幅を y に応じて変えて密度を表現する。
+// 各斜線は外接矩形を持たせ、文字と重ならない斜線は切り抜き時に除外できるようにする。
+function buildHatchItems(font) {
     const upm = font.unitsPerEm;
     const yTop = font.ascender;
     const yBot = font.descender;
-    const pitch = upm / 30;               // 斜線の間隔
+    const pitch = upm / 30;
     const cx = upm / 2;
     const cy = (yTop + yBot) / 2;
-    const L = upm * 1.2;                  // 文字を十分覆う長さ
+    const L = upm * 1.2;
     const K = Math.ceil(L / pitch) + 2;
+    const STEPS = 8;
 
     const coverageAt = y => {
         const t = clamp((yTop - y) / (yTop - yBot), 0, 1); // 上=0, 下=1
         const C = 1 - 0.8 * t;                              // 1.0 → 0.2
-        return 1 - Math.sqrt(1 - C);                        // 1方向あたりの被覆率
+        return 1 - Math.sqrt(1 - C);
     };
 
-    const polys = [];
+    const items = [];
     for (const ang of [Math.PI / 4, -Math.PI / 4]) {
         const u = { x: Math.cos(ang), y: Math.sin(ang) };
         const n = { x: -u.y, y: u.x };
@@ -231,7 +237,6 @@ function buildHatchClip(font) {
             const bx = cx + n.x * k * pitch;
             const by = cy + n.y * k * pitch;
             const left = [], right = [];
-            const STEPS = 12;
 
             for (let j = 0; j <= STEPS; j++) {
                 const s = -L + (2 * L) * j / STEPS;
@@ -241,21 +246,54 @@ function buildHatchClip(font) {
                 left.push({ x: px + n.x * h, y: py + n.y * h });
                 right.push({ x: px - n.x * h, y: py - n.y * h });
             }
-            polys.push(left.concat(right.reverse()));
+            const pts = left.concat(right.reverse());
+
+            let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+            for (const p of pts) {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+            items.push({
+                poly: ringToClipper(pts),
+                minX, minY, maxX, maxY
+            });
         }
     }
-    return ringsToClipper(polys);
+    return items;
 }
 
 // ---------- グリフを斜線で切り抜く（文字 ∩ 斜線） ----------
-function hatchGlyph(path, clipPolys) {
-    const subj = ringsToClipper(pathToRings(path));
+function hatchGlyph(path, hatchItems) {
     const out = new opentype.Path();
-    if (subj.length === 0) return out;
+    const rings = pathToRings(path);
+    if (rings.length === 0) return out;
 
+    // 文字の外接矩形を求める
+    let gx1 = Infinity, gy1 = Infinity, gx2 = -Infinity, gy2 = -Infinity;
+    for (const r of rings) {
+        for (const p of r) {
+            if (p.x < gx1) gx1 = p.x;
+            if (p.x > gx2) gx2 = p.x;
+            if (p.y < gy1) gy1 = p.y;
+            if (p.y > gy2) gy2 = p.y;
+        }
+    }
+
+    // 外接矩形と重なる斜線だけを使う
+    const clip = [];
+    for (const it of hatchItems) {
+        if (it.maxX >= gx1 && it.minX <= gx2 && it.maxY >= gy1 && it.minY <= gy2) {
+            clip.push(it.poly);
+        }
+    }
+    if (clip.length === 0) return out;
+
+    const subj = rings.map(ringToClipper);
     const cpr = new ClipperLib.Clipper();
     cpr.AddPaths(subj, ClipperLib.PolyType.ptSubject, true);
-    cpr.AddPaths(clipPolys, ClipperLib.PolyType.ptClip, true);
+    cpr.AddPaths(clip, ClipperLib.PolyType.ptClip, true);
 
     const sol = [];
     cpr.Execute(
@@ -276,9 +314,9 @@ function hatchGlyph(path, clipPolys) {
     return out;
 }
 
-// 対象外グリフ：立方曲線だけ直線に分解して、出力フォーマットに合わせる
-function copyPath(path) {
-    if (!path.commands.some(c => c.type === 'C')) return path;
+// 対象外グリフ：曲線を直線に分解して、出力フォーマットに合わせる
+function flattenPath(path) {
+    if (!path.commands.some(c => c.type === 'C' || c.type === 'Q')) return path;
     const out = new opentype.Path();
     for (const ring of pathToRings(path)) {
         ring.forEach((p, i) => (i === 0 ? out.moveTo(p.x, p.y) : out.lineTo(p.x, p.y)));
@@ -313,10 +351,11 @@ $('convert-btn').addEventListener('click', async () => {
 
     const btn = $('convert-btn');
     btn.disabled = true;
+    $('result-card').style.display = 'none';
     const font = loadedFont;
 
     try {
-        // 対象文字 → グリフIDの集合
+        // 対象文字 → グリフID
         const targetChars = buildTargetChars();
         for (const ch of $('extra-chars').value) targetChars.add(ch);
 
@@ -326,14 +365,14 @@ $('convert-btn').addEventListener('click', async () => {
             if (gi > 0) targetIds.add(gi);
         }
 
-        const clipPolys = buildHatchClip(font);
+        const hatchItems = buildHatchItems(font);
         const newGlyphs = [];
         const n = font.numGlyphs;
 
         for (let i = 0; i < n; i++) {
             const g = font.glyphs.get(i);
             const src = g.path || new opentype.Path();
-            const path = targetIds.has(i) ? hatchGlyph(src, clipPolys) : copyPath(src);
+            const path = targetIds.has(i) ? hatchGlyph(src, hatchItems) : flattenPath(src);
 
             newGlyphs.push(new opentype.Glyph({
                 name: g.name,
@@ -343,7 +382,7 @@ $('convert-btn').addEventListener('click', async () => {
                 path: path
             }));
 
-            if (i % 50 === 0) {
+            if (i % 20 === 0) {
                 $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
                 await sleep(0); // UIを固まらせない
             }
@@ -359,25 +398,33 @@ $('convert-btn').addEventListener('click', async () => {
         });
 
         const outBuf = outFont.toArrayBuffer();
+        const sizeMB = (outBuf.byteLength / 1024 / 1024).toFixed(1);
 
-        // ダウンロード
+        // ダウンロードリンク
         const blob = new Blob([outBuf], { type: 'font/otf' });
         const link = $('download-link');
+        if (link.href.startsWith('blob:')) URL.revokeObjectURL(link.href);
         link.href = URL.createObjectURL(blob);
         link.download = loadedName + '_crosshatch.otf';
 
-        // プレビュー（変換後のフォントを読み込んで表示）
-        try {
-            const ff = new FontFace('CrosshatchPreview', outBuf);
-            await ff.load();
-            document.fonts.add(ff);
-            $('preview').style.fontFamily = "'CrosshatchPreview', sans-serif";
-        } catch (_) {
-            // プレビューに失敗してもダウンロードは可能
+        // プレビュー（サイズが大きい場合は省略）
+        if (outBuf.byteLength <= PREVIEW_MAX_BYTES) {
+            try {
+                const ff = new FontFace('CrosshatchPreview', outBuf);
+                await ff.load();
+                document.fonts.add(ff);
+                $('preview').style.fontFamily = "'CrosshatchPreview', sans-serif";
+                $('preview-note').innerText = '';
+            } catch (_) {
+                $('preview-note').innerText = 'プレビューの表示に失敗しました（ダウンロードは可能です）';
+            }
+        } else {
+            $('preview').style.fontFamily = 'sans-serif';
+            $('preview-note').innerText = `ファイルが大きいため（${sizeMB} MB）プレビューは省略しました`;
         }
 
         $('result-card').style.display = 'block';
-        $('progress').innerText = `完了: ${targetIds.size} 文字を変換しました。`;
+        $('progress').innerText = `完了: ${targetIds.size} 文字を変換しました（${sizeMB} MB）。`;
     } catch (err) {
         console.error(err);
         alert('変換中にエラーが発生しました: ' + err.message);
