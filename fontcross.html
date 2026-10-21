@@ -7,7 +7,7 @@
 
     <!-- フォントの読み込み・書き出し -->
     <script src="https://unpkg.com/opentype.js@2.0.0/dist/opentype.js"></script>
-    <!-- 輪郭どうしの交差計算（文字 ∩ 斜線）に使用 -->
+    <!-- 輪郭どうしの交差計算（文字 ∩ 斜線）に使用（メインとWorkerの両方で利用） -->
     <script src="https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.min.js"></script>
 
     <style>
@@ -110,9 +110,11 @@
 <script>
 // ===== 設定 =====
 const SCALE = 10;                              // Clipper は整数座標が必要なので小数を保つため拡大
-const PITCH_DIVISOR = 20;                      // 斜線の間隔 = UPM / PITCH_DIVISOR。大きいほど斜線が細かく重く、小さいほど粗く軽い
+const PITCH_DIVISOR = 20;                      // 斜線の間隔 = UPM / PITCH_DIVISOR（小さいほど粗く軽い）
 const Q_STEPS = 4;                             // 2次曲線の分割数
 const C_STEPS = 6;                             // 3次曲線の分割数
+const CUT_TAIL_CHARS = 100;                    // 自動生成された対象文字の末尾からこの数だけ除外する
+const GLYPH_TIMEOUT_MS = 3000;                 // 1グリフの交差計算の上限時間。超えたら打ち切る
 const PREVIEW_MAX_BYTES = 15 * 1024 * 1024;    // これより大きい場合はプレビューを省略
 const PROGRESS_EVERY = 500;                    // 進捗表示の間隔（グリフ数）
 
@@ -138,6 +140,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // ===== 対象文字の自動生成（Shift_JIS の行構成を利用） =====
 // リードバイト 0x88〜0x9F = JIS X 0208 第一水準漢字（16〜47区）
 // 0x81 = 記号、0x82 = 全角英数・ひらがな、0x83 = カタカナ
+// 挿入順は「記号・かな → 漢字」なので、末尾の除外は主に漢字の後ろの方が対象になる
 function buildTargetChars() {
     const dec = new TextDecoder('shift_jis');
     const leads = [0x81, 0x82, 0x83];
@@ -160,13 +163,13 @@ function buildTargetChars() {
     return chars;
 }
 
-// ===== パス → リング（曲線は直線に分割） =====
-function pathToRings(path) {
+// ===== メインスレッド側の幾何ユーティリティ（3次曲線の直線化用） =====
+function pathToRings(commands) {
     const rings = [];
     let cur = null;
     let cx = 0, cy = 0, sx = 0, sy = 0;
 
-    for (const c of path.commands) {
+    for (const c of commands) {
         if (c.type === 'M') {
             cur = [{ x: c.x, y: c.y }];
             rings.push(cur);
@@ -203,14 +206,20 @@ function pathToRings(path) {
     return rings.filter(r => r.length >= 3);
 }
 
-function ringToClipper(ring) {
-    return ring.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) }));
+// 3次曲線（C）を含むグリフだけ直線化する。それ以外は元のパスをそのまま返す
+function flattenPath(path) {
+    if (!path.commands.some(c => c.type === 'C')) return path;
+    const out = new opentype.Path();
+    for (const ring of pathToRings(path.commands)) {
+        ring.forEach((p, i) => (i === 0 ? out.moveTo(p.x, p.y) : out.lineTo(p.x, p.y)));
+        out.close();
+    }
+    return out;
 }
 
 // ===== 斜線の生成（全グリフ共通なので一度だけ作る） =====
 // 目標カバー率 C は上端 1.0、下端 0.2 に線形変化。
 // 斜線は2方向を重ねるので、1方向あたりの被覆率 c は 1 - (1 - c)^2 = C を満たすように決める。
-// 各斜線は外接矩形を持ち、文字と重ならないものは切り抜き時に除外する。
 function buildHatchItems(font) {
     const upm = font.unitsPerEm;
     const yTop = font.ascender;
@@ -255,40 +264,86 @@ function buildHatchItems(font) {
                 if (p.y < minY) minY = p.y;
                 if (p.y > maxY) maxY = p.y;
             }
-            items.push({ poly: ringToClipper(pts), minX, minY, maxX, maxY });
+            items.push({
+                poly: pts.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) })),
+                minX, minY, maxX, maxY
+            });
         }
     }
     return items;
 }
 
-// ===== グリフを斜線で切り抜く（文字 ∩ 斜線） =====
-function hatchGlyph(path, hatchItems) {
-    const out = new opentype.Path();
-    const rings = pathToRings(path);
-    if (rings.length === 0) return out;
+// ===== Worker（交差計算を別スレッドで実行し、固まったら打ち切る） =====
+const WORKER_SRC = `
+importScripts('https://cdn.jsdelivr.net/npm/clipper-lib@6.4.2/clipper.min.js');
 
-    // 文字の外接矩形
+const SCALE = ${SCALE};
+const Q_STEPS = ${Q_STEPS};
+const C_STEPS = ${C_STEPS};
+let HATCH = [];
+
+function pathToRings(commands) {
+    const rings = [];
+    let cur = null;
+    let cx = 0, cy = 0, sx = 0, sy = 0;
+    for (const c of commands) {
+        if (c.type === 'M') {
+            cur = [{ x: c.x, y: c.y }];
+            rings.push(cur);
+            cx = sx = c.x; cy = sy = c.y;
+        } else if (c.type === 'L') {
+            if (!cur) continue;
+            cur.push({ x: c.x, y: c.y });
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'Q') {
+            if (!cur) continue;
+            for (let k = 1; k <= Q_STEPS; k++) {
+                const t = k / Q_STEPS, mt = 1 - t;
+                cur.push({
+                    x: mt * mt * cx + 2 * mt * t * c.x1 + t * t * c.x,
+                    y: mt * mt * cy + 2 * mt * t * c.y1 + t * t * c.y
+                });
+            }
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'C') {
+            if (!cur) continue;
+            for (let k = 1; k <= C_STEPS; k++) {
+                const t = k / C_STEPS, mt = 1 - t;
+                const a = mt * mt * mt, b = 3 * mt * mt * t, d = 3 * mt * t * t, e = t * t * t;
+                cur.push({
+                    x: a * cx + b * c.x1 + d * c.x2 + e * c.x,
+                    y: a * cy + b * c.y1 + d * c.y2 + e * c.y
+                });
+            }
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'Z') {
+            cx = sx; cy = sy;
+        }
+    }
+    return rings.filter(r => r.length >= 3);
+}
+
+function hatchGlyph(commands) {
+    const rings = pathToRings(commands);
+    if (rings.length === 0) return [];
+
     let gx1 = Infinity, gy1 = Infinity, gx2 = -Infinity, gy2 = -Infinity;
-    for (const r of rings) {
-        for (const p of r) {
-            if (p.x < gx1) gx1 = p.x;
-            if (p.x > gx2) gx2 = p.x;
-            if (p.y < gy1) gy1 = p.y;
-            if (p.y > gy2) gy2 = p.y;
-        }
+    for (const r of rings) for (const p of r) {
+        if (p.x < gx1) gx1 = p.x;
+        if (p.x > gx2) gx2 = p.x;
+        if (p.y < gy1) gy1 = p.y;
+        if (p.y > gy2) gy2 = p.y;
     }
 
-    // 外接矩形と重なる斜線だけを使う
     const clip = [];
-    for (const it of hatchItems) {
-        if (it.maxX >= gx1 && it.minX <= gx2 && it.maxY >= gy1 && it.minY <= gy2) {
-            clip.push(it.poly);
-        }
+    for (const it of HATCH) {
+        if (it.maxX >= gx1 && it.minX <= gx2 && it.maxY >= gy1 && it.minY <= gy2) clip.push(it.poly);
     }
-    if (clip.length === 0) return out;
+    if (clip.length === 0) return [];
 
+    const subj = rings.map(r => r.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) })));
     const cpr = new ClipperLib.Clipper();
-    cpr.AddPaths(rings.map(ringToClipper), ClipperLib.PolyType.ptSubject, true);
+    cpr.AddPaths(subj, ClipperLib.PolyType.ptSubject, true);
     cpr.AddPaths(clip, ClipperLib.PolyType.ptClip, true);
 
     const sol = [];
@@ -298,27 +353,71 @@ function hatchGlyph(path, hatchItems) {
         ClipperLib.PolyFillType.pftNonZero,
         ClipperLib.PolyFillType.pftNonZero
     );
+    return sol.filter(p => p.length >= 3).map(p => p.map(q => [q.X / SCALE, q.Y / SCALE]));
+}
 
-    for (const poly of sol) {
-        if (poly.length < 3) continue;
-        out.moveTo(poly[0].X / SCALE, poly[0].Y / SCALE);
-        for (let i = 1; i < poly.length; i++) {
-            out.lineTo(poly[i].X / SCALE, poly[i].Y / SCALE);
+self.onmessage = e => {
+    const m = e.data;
+    if (m.type === 'init') {
+        HATCH = m.items;
+        self.postMessage({ type: 'ready' });
+    } else if (m.type === 'glyph') {
+        try {
+            self.postMessage({ type: 'done', id: m.id, polys: hatchGlyph(m.commands) });
+        } catch (err) {
+            self.postMessage({ type: 'error', id: m.id, msg: String(err && err.message || err) });
         }
+    }
+};
+`;
+
+const WORKER_URL = URL.createObjectURL(new Blob([WORKER_SRC], { type: 'application/javascript' }));
+
+// Worker を作り、斜線データを渡して準備完了を待つ
+function makeHatchWorker(items) {
+    return new Promise((resolve, reject) => {
+        const w = new Worker(WORKER_URL);
+        w.onerror = () => { w.terminate(); reject(new Error('Worker の起動に失敗しました（clipper の読み込みを確認してください）')); };
+        w.onmessage = e => {
+            if (e.data.type === 'ready') resolve(w);
+        };
+        w.postMessage({ type: 'init', items });
+    });
+}
+
+// 1グリフ分の交差計算を依頼。時間内に返らなければ reject する
+function runGlyph(worker, id, commands) {
+    return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('タイムアウト')), GLYPH_TIMEOUT_MS);
+        worker.onerror = () => { clearTimeout(timer); reject(new Error('Worker エラー')); };
+        worker.onmessage = e => {
+            clearTimeout(timer);
+            if (e.data.type === 'done') resolve(e.data.polys);
+            else reject(new Error(e.data.msg));
+        };
+        worker.postMessage({ type: 'glyph', id, commands });
+    });
+}
+
+// 返ってきたポリゴン群を opentype.Path にする
+function polysToPath(polys) {
+    const out = new opentype.Path();
+    for (const poly of polys) {
+        out.moveTo(poly[0][0], poly[0][1]);
+        for (let i = 1; i < poly.length; i++) out.lineTo(poly[i][0], poly[i][1]);
         out.close();
     }
     return out;
 }
 
-// 3次曲線（C）を含むグリフだけ直線化する。2次曲線のみのグリフは触らない
-function flattenPath(path) {
-    if (!path.commands.some(c => c.type === 'C')) return path;
-    const out = new opentype.Path();
-    for (const ring of pathToRings(path)) {
-        ring.forEach((p, i) => (i === 0 ? out.moveTo(p.x, p.y) : out.lineTo(p.x, p.y)));
-        out.close();
-    }
-    return out;
+function makeGlyph(g, path) {
+    return new opentype.Glyph({
+        name: g.name,
+        unicode: g.unicode,
+        unicodes: g.unicodes,
+        advanceWidth: g.advanceWidth,
+        path: path
+    });
 }
 
 // ===== フォント読み込み =====
@@ -350,10 +449,13 @@ $('convert-btn').addEventListener('click', async () => {
     $('result-card').style.display = 'none';
     const font = loadedFont;
     const failed = [];
+    let worker = null;
 
     try {
-        // 対象文字 → グリフID
-        const targetChars = buildTargetChars();
+        // 対象文字：自動生成から末尾 CUT_TAIL_CHARS 文字を除外し、追加文字を足す
+        const autoChars = [...buildTargetChars()];
+        const kept = autoChars.slice(0, Math.max(0, autoChars.length - CUT_TAIL_CHARS));
+        const targetChars = new Set(kept);
         for (const ch of $('extra-chars').value) targetChars.add(ch);
 
         const targetIds = new Set();
@@ -363,38 +465,31 @@ $('convert-btn').addEventListener('click', async () => {
         }
 
         const hatchItems = buildHatchItems(font);
+        worker = await makeHatchWorker(hatchItems);
+
         const n = font.numGlyphs;
         const newGlyphs = new Array(n);
 
         for (let i = 0; i < n; i++) {
             const g = font.glyphs.get(i);
+            const src = g.path || new opentype.Path();
 
             if (!targetIds.has(i)) {
-                // 対象外は元のグリフをそのまま使う（新規オブジェクトを作らない）
-                if (i !== 0 && i % PROGRESS_EVERY === 0) {
-                    $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
-                    await sleep(0);
+                // 対象外：3次曲線を含むものだけ直線化、それ以外は元のグリフを再利用
+                const p = flattenPath(src);
+                newGlyphs[i] = (p === src) ? g : makeGlyph(g, p);
+            } else {
+                try {
+                    const polys = await runGlyph(worker, i, src.commands);
+                    newGlyphs[i] = makeGlyph(g, polysToPath(polys));
+                } catch (err) {
+                    // 固まった・失敗したグリフは元の形で残し、Worker を作り直す
+                    failed.push(`${i}(${g.unicode ? 'U+' + g.unicode.toString(16).toUpperCase() : g.name})`);
+                    try { worker.terminate(); } catch (_) {}
+                    worker = await makeHatchWorker(hatchItems);
+                    newGlyphs[i] = makeGlyph(g, flattenPath(src));
                 }
-                newGlyphs[i] = g;
-                continue;
             }
-
-            let path;
-            try {
-                path = hatchGlyph(g.path || new opentype.Path(), hatchItems);
-            } catch (err) {
-                failed.push(`${i}(${g.unicode ? 'U+' + g.unicode.toString(16).toUpperCase() : g.name})`);
-                newGlyphs[i] = g;   // 失敗したグリフは元のまま残す
-                continue;
-            }
-
-            newGlyphs[i] = new opentype.Glyph({
-                name: g.name,
-                unicode: g.unicode,
-                unicodes: g.unicodes,
-                advanceWidth: g.advanceWidth,
-                path: path
-            });
 
             if (i % PROGRESS_EVERY === 0) {
                 $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
@@ -402,8 +497,8 @@ $('convert-btn').addEventListener('click', async () => {
             }
         }
 
-        // 不要になった斜線データを解放
-        hatchItems.length = 0;
+        try { worker.terminate(); } catch (_) {}
+        worker = null;
 
         $('progress').innerText = '出力ファイルを作成中…';
         await sleep(0);
@@ -423,7 +518,7 @@ $('convert-btn').addEventListener('click', async () => {
         } catch (err) {
             throw new Error(
                 '出力の生成に失敗しました（メモリ不足の可能性が高いです）。' +
-                'PITCH_DIVISOR の値を小さく（例: 20 → 14）するか、フォントを小さくしてください。 詳細: ' + err.message
+                'PITCH_DIVISOR を小さく（例: 20 → 14）してください。 詳細: ' + err.message
             );
         }
 
@@ -455,8 +550,8 @@ $('convert-btn').addEventListener('click', async () => {
         $('result-card').style.display = 'block';
         let msg = `完了: ${targetIds.size} 文字を変換しました（${sizeMB} MB）。`;
         if (failed.length > 0) {
-            const shown = failed.slice(0, 20).join(', ');
-            msg += ` 変換に失敗したグリフ（元の形で残しています）: ${shown}${failed.length > 20 ? ' ほか' + (failed.length - 20) + '件' : ''}`;
+            const shown = failed.slice(0, 30).join(', ');
+            msg += ` 時間切れ・失敗で元の形のまま残したグリフ（${failed.length}件）: ${shown}${failed.length > 30 ? ' ほか' + (failed.length - 30) + '件' : ''}`;
         }
         $('progress').innerText = msg;
     } catch (err) {
@@ -464,6 +559,7 @@ $('convert-btn').addEventListener('click', async () => {
         alert('変換中にエラーが発生しました: ' + err.message);
         $('progress').innerText = '';
     } finally {
+        if (worker) { try { worker.terminate(); } catch (_) {} }
         btn.disabled = false;
     }
 });
