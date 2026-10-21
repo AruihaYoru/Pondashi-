@@ -53,7 +53,7 @@
             margin-bottom: 15px;
             display: none;
         }
-        #font-info, #progress { margin-top: 8px; font-size: 14px; color: #555; }
+        #font-info, #progress { margin-top: 8px; font-size: 14px; color: #555; word-break: break-all; }
         #download-link {
             display: inline-block;
             background: #34c759;
@@ -108,8 +108,13 @@
     </div>
 
 <script>
-const SCALE = 10;                    // Clipper は整数座標が必要なので小数を保つため拡大
-const PREVIEW_MAX_BYTES = 15 * 1024 * 1024;  // これより大きい場合はプレビューを省略
+// ===== 設定 =====
+const SCALE = 10;                              // Clipper は整数座標が必要なので小数を保つため拡大
+const PITCH_DIVISOR = 20;                      // 斜線の間隔 = UPM / PITCH_DIVISOR。大きいほど斜線が細かく重く、小さいほど粗く軽い
+const Q_STEPS = 4;                             // 2次曲線の分割数
+const C_STEPS = 6;                             // 3次曲線の分割数
+const PREVIEW_MAX_BYTES = 15 * 1024 * 1024;    // これより大きい場合はプレビューを省略
+const PROGRESS_EVERY = 500;                    // 進捗表示の間隔（グリフ数）
 
 const $ = id => document.getElementById(id);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -118,7 +123,7 @@ const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 let loadedFont = null;
 let loadedName = 'font';
 
-// ---------- 起動時チェック ----------
+// ===== 起動時チェック =====
 window.addEventListener('DOMContentLoaded', () => {
     const btn = $('convert-btn');
     if (typeof opentype !== 'undefined' && typeof ClipperLib !== 'undefined') {
@@ -130,7 +135,7 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
-// ---------- 対象文字の自動生成（Shift_JIS の行構成を利用） ----------
+// ===== 対象文字の自動生成（Shift_JIS の行構成を利用） =====
 // リードバイト 0x88〜0x9F = JIS X 0208 第一水準漢字（16〜47区）
 // 0x81 = 記号、0x82 = 全角英数・ひらがな、0x83 = カタカナ
 function buildTargetChars() {
@@ -155,11 +160,7 @@ function buildTargetChars() {
     return chars;
 }
 
-// ---------- パス → ポリゴン（曲線は直線に分割） ----------
-// 分割数は少なめにして、メモリ使用量を抑える
-const Q_STEPS = 4;
-const C_STEPS = 6;
-
+// ===== パス → リング（曲線は直線に分割） =====
 function pathToRings(path) {
     const rings = [];
     let cur = null;
@@ -206,16 +207,15 @@ function ringToClipper(ring) {
     return ring.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) }));
 }
 
-// ---------- 斜線の生成（全グリフ共通なので一度だけ作る） ----------
+// ===== 斜線の生成（全グリフ共通なので一度だけ作る） =====
 // 目標カバー率 C は上端 1.0、下端 0.2 に線形変化。
 // 斜線は2方向を重ねるので、1方向あたりの被覆率 c は 1 - (1 - c)^2 = C を満たすように決める。
-// 各斜線の幅を y に応じて変えて密度を表現する。
-// 各斜線は外接矩形を持たせ、文字と重ならない斜線は切り抜き時に除外できるようにする。
+// 各斜線は外接矩形を持ち、文字と重ならないものは切り抜き時に除外する。
 function buildHatchItems(font) {
     const upm = font.unitsPerEm;
     const yTop = font.ascender;
     const yBot = font.descender;
-    const pitch = upm / 30;
+    const pitch = upm / PITCH_DIVISOR;
     const cx = upm / 2;
     const cy = (yTop + yBot) / 2;
     const L = upm * 1.2;
@@ -255,22 +255,19 @@ function buildHatchItems(font) {
                 if (p.y < minY) minY = p.y;
                 if (p.y > maxY) maxY = p.y;
             }
-            items.push({
-                poly: ringToClipper(pts),
-                minX, minY, maxX, maxY
-            });
+            items.push({ poly: ringToClipper(pts), minX, minY, maxX, maxY });
         }
     }
     return items;
 }
 
-// ---------- グリフを斜線で切り抜く（文字 ∩ 斜線） ----------
+// ===== グリフを斜線で切り抜く（文字 ∩ 斜線） =====
 function hatchGlyph(path, hatchItems) {
     const out = new opentype.Path();
     const rings = pathToRings(path);
     if (rings.length === 0) return out;
 
-    // 文字の外接矩形を求める
+    // 文字の外接矩形
     let gx1 = Infinity, gy1 = Infinity, gx2 = -Infinity, gy2 = -Infinity;
     for (const r of rings) {
         for (const p of r) {
@@ -290,9 +287,8 @@ function hatchGlyph(path, hatchItems) {
     }
     if (clip.length === 0) return out;
 
-    const subj = rings.map(ringToClipper);
     const cpr = new ClipperLib.Clipper();
-    cpr.AddPaths(subj, ClipperLib.PolyType.ptSubject, true);
+    cpr.AddPaths(rings.map(ringToClipper), ClipperLib.PolyType.ptSubject, true);
     cpr.AddPaths(clip, ClipperLib.PolyType.ptClip, true);
 
     const sol = [];
@@ -314,9 +310,9 @@ function hatchGlyph(path, hatchItems) {
     return out;
 }
 
-// 対象外グリフ：曲線を直線に分解して、出力フォーマットに合わせる
+// 3次曲線（C）を含むグリフだけ直線化する。2次曲線のみのグリフは触らない
 function flattenPath(path) {
-    if (!path.commands.some(c => c.type === 'C' || c.type === 'Q')) return path;
+    if (!path.commands.some(c => c.type === 'C')) return path;
     const out = new opentype.Path();
     for (const ring of pathToRings(path)) {
         ring.forEach((p, i) => (i === 0 ? out.moveTo(p.x, p.y) : out.lineTo(p.x, p.y)));
@@ -325,7 +321,7 @@ function flattenPath(path) {
     return out;
 }
 
-// ---------- フォント読み込み ----------
+// ===== フォント読み込み =====
 $('font-file').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
@@ -342,7 +338,7 @@ $('font-file').addEventListener('change', async e => {
     }
 });
 
-// ---------- 変換 → OTF出力 ----------
+// ===== 変換 → OTF出力 =====
 $('convert-btn').addEventListener('click', async () => {
     if (!loadedFont) {
         alert('先にフォントファイルを読み込んでください。');
@@ -353,6 +349,7 @@ $('convert-btn').addEventListener('click', async () => {
     btn.disabled = true;
     $('result-card').style.display = 'none';
     const font = loadedFont;
+    const failed = [];
 
     try {
         // 対象文字 → グリフID
@@ -366,27 +363,50 @@ $('convert-btn').addEventListener('click', async () => {
         }
 
         const hatchItems = buildHatchItems(font);
-        const newGlyphs = [];
         const n = font.numGlyphs;
+        const newGlyphs = new Array(n);
 
         for (let i = 0; i < n; i++) {
             const g = font.glyphs.get(i);
-            const src = g.path || new opentype.Path();
-            const path = targetIds.has(i) ? hatchGlyph(src, hatchItems) : flattenPath(src);
 
-            newGlyphs.push(new opentype.Glyph({
+            if (!targetIds.has(i)) {
+                // 対象外は元のグリフをそのまま使う（新規オブジェクトを作らない）
+                if (i !== 0 && i % PROGRESS_EVERY === 0) {
+                    $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
+                    await sleep(0);
+                }
+                newGlyphs[i] = g;
+                continue;
+            }
+
+            let path;
+            try {
+                path = hatchGlyph(g.path || new opentype.Path(), hatchItems);
+            } catch (err) {
+                failed.push(`${i}(${g.unicode ? 'U+' + g.unicode.toString(16).toUpperCase() : g.name})`);
+                newGlyphs[i] = g;   // 失敗したグリフは元のまま残す
+                continue;
+            }
+
+            newGlyphs[i] = new opentype.Glyph({
                 name: g.name,
                 unicode: g.unicode,
                 unicodes: g.unicodes,
                 advanceWidth: g.advanceWidth,
                 path: path
-            }));
+            });
 
-            if (i % 20 === 0) {
+            if (i % PROGRESS_EVERY === 0) {
                 $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
-                await sleep(0); // UIを固まらせない
+                await sleep(0);
             }
         }
+
+        // 不要になった斜線データを解放
+        hatchItems.length = 0;
+
+        $('progress').innerText = '出力ファイルを作成中…';
+        await sleep(0);
 
         const outFont = new opentype.Font({
             familyName: loadedName + ' Crosshatch',
@@ -397,7 +417,16 @@ $('convert-btn').addEventListener('click', async () => {
             glyphs: newGlyphs
         });
 
-        const outBuf = outFont.toArrayBuffer();
+        let outBuf;
+        try {
+            outBuf = outFont.toArrayBuffer();
+        } catch (err) {
+            throw new Error(
+                '出力の生成に失敗しました（メモリ不足の可能性が高いです）。' +
+                'PITCH_DIVISOR の値を小さく（例: 20 → 14）するか、フォントを小さくしてください。 詳細: ' + err.message
+            );
+        }
+
         const sizeMB = (outBuf.byteLength / 1024 / 1024).toFixed(1);
 
         // ダウンロードリンク
@@ -407,7 +436,7 @@ $('convert-btn').addEventListener('click', async () => {
         link.href = URL.createObjectURL(blob);
         link.download = loadedName + '_crosshatch.otf';
 
-        // プレビュー（サイズが大きい場合は省略）
+        // プレビュー（大きい場合は省略）
         if (outBuf.byteLength <= PREVIEW_MAX_BYTES) {
             try {
                 const ff = new FontFace('CrosshatchPreview', outBuf);
@@ -424,7 +453,12 @@ $('convert-btn').addEventListener('click', async () => {
         }
 
         $('result-card').style.display = 'block';
-        $('progress').innerText = `完了: ${targetIds.size} 文字を変換しました（${sizeMB} MB）。`;
+        let msg = `完了: ${targetIds.size} 文字を変換しました（${sizeMB} MB）。`;
+        if (failed.length > 0) {
+            const shown = failed.slice(0, 20).join(', ');
+            msg += ` 変換に失敗したグリフ（元の形で残しています）: ${shown}${failed.length > 20 ? ' ほか' + (failed.length - 20) + '件' : ''}`;
+        }
+        $('progress').innerText = msg;
     } catch (err) {
         console.error(err);
         alert('変換中にエラーが発生しました: ' + err.message);
