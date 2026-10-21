@@ -6,14 +6,7 @@
     <title>Font Crosshatch Converter</title>
     
     <!-- 対策1: メインのCDNから読み込み -->
-    <script src="https://cloudflare.com"></script>
-    
-    <!-- 対策2: 万が一上記がつながらなかった場合のフォールバック（予備） -->
-    <script>
-        if (typeof opentype === 'undefined') {
-            document.write('<script src="https://unpkg.com"><\/script>');
-        }
-    </script>
+    <script src="https://unpkg.com/opentype.js@2.0.0/dist/opentype.js"></script>
 
     <style>
         body {
