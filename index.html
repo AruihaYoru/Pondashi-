@@ -54,14 +54,16 @@ aside input[type=checkbox]{accent-color:var(--acc)}
 #fn{font-size:12px;color:var(--sub);margin-top:6px;overflow-wrap:anywhere}
 .clrbtn{margin-top:14px;width:100%}
 .clrbtn+.clrbtn{margin-top:8px}
-.kg{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
-.kg button{padding:6px 2px;font-size:11px;line-height:1.25;overflow:hidden;min-height:44px}
-.kg button b{display:block;font-family:monospace;font-size:12px}
-.kg button.sel{background:var(--acc);border-color:var(--acc);color:#fff}
-.kg button:disabled{opacity:.3;cursor:not-allowed}
-.khead{display:flex;align-items:center;justify-content:space-between;margin:12px 0 6px;font-size:13px;color:var(--sub)}
-.khead button{padding:3px 10px;font-size:12px}
-.khelp{font-size:11px;color:var(--sub);margin-top:6px;line-height:1.5}
+.khead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 4px;font-size:14px;font-weight:600}
+.khead button{padding:3px 10px;font-size:12px;font-weight:400}
+.khelp{font-size:11px;color:var(--sub);line-height:1.5}
+.lkrow{position:relative;border:1px solid var(--line);border-left:5px solid var(--sub);border-radius:10px;padding:8px 10px;margin-top:8px}
+.lkrow small{display:block;font-size:11px;color:var(--sub);margin:6px 0 3px}
+.lkrow select{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.lkrow .khelp{margin-top:6px}
+.lkx{position:absolute;top:4px;right:6px;padding:0 8px;font-size:16px;line-height:1.4}
+.lkrow[data-a=stop]{border-left-color:#e5484d}.lkrow[data-a=xf]{border-left-color:#d97b00}.lkrow[data-a=cut]{border-left-color:#8f3b3f}
+.lkrow[data-a=with]{border-left-color:#30a46c}.lkrow[data-a=next]{border-left-color:#6e56cf}.lkrow[data-a=duck]{border-left-color:#0090ff}
 #toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
 #toast.show{opacity:1}
 .hint{font-size:12px;color:var(--sub);text-align:center;padding:0 16px 24px;line-height:1.7}
@@ -113,9 +115,9 @@ aside input[type=checkbox]{accent-color:var(--acc)}
     <label for="ae">再生自動終了（秒・0で無効）</label>
     <input type="number" id="ae" min="0" step="0.01" inputmode="decimal">
 
-    <div class="khead"><span>再生したとき止めるパッド</span><button id="kclr" type="button">解除</button></div>
-    <div class="kg" id="kg"></div>
-    <div class="khelp">このパッドを再生すると、選んだパッドが止まる側のフェードアウト設定に従って止まります。</div>
+    <div class="khead"><span>連動（他のパッドを操作）</span><button id="kadd" type="button">＋追加</button></div>
+    <div class="khelp">このパッドを再生したとき、他のパッドを止めたり鳴らしたりします。</div>
+    <div id="lk"></div>
 
     <label for="fl">音声・動画ファイル</label>
     <input type="file" id="fl" accept="audio/*,video/*">
@@ -147,9 +149,9 @@ const idx=id=>pads.findIndex(p=>p.id===id);
 const padEl=id=>grid.querySelector('.pad[data-id="'+id+'"]');
 const keyLabel=id=>{const i=idx(id);return KEYS[i]?KEYS[i].toUpperCase():String(i+1)};
 
-function defPad(id,i){return{id,name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:'',kills:[]}}
+function defPad(id,i){return{id,name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:'',links:[]}}
 function load(){
-  try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length)return s.map((p,i)=>({...defPad(i,i),...p,id:p.id??i}))}catch(e){}
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length)return s.map((p,i)=>{const q={...defPad(i,i),...p,id:p.id??i};if(!Array.isArray(p.links))q.links=(p.kills||[]).map(t=>({t,a:'stop'}));delete q.kills;return q})}catch(e){}
   return Array.from({length:16},(_,i)=>defPad(i,i));
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(pads))}catch(e){toast('設定を保存できませんでした')}}
@@ -223,26 +225,44 @@ function render(id){
   if(full)el.style.setProperty('--c',p.color);else el.style.removeProperty('--c');
   el.querySelector('.ky').textContent=keyLabel(id);
   el.querySelector('.nm').textContent=p.name||(full?'(無名)':'空き');
-  const kn=(p.kills||[]).filter(j=>P(j)).length;
-  el.querySelector('.sb').textContent=full?((p.kind==='video'?'🎬 ':'🔊 ')+p.file+(kn?' ⏹×'+kn:'')):'タップで設定';
+  const kn=p.links.filter(l=>P(l.t)).length;
+  el.querySelector('.sb').textContent=full?((p.kind==='video'?'🎬 ':'🔊 ')+p.file+(kn?' ⛓'+kn:'')):'タップで設定';
   el.classList.toggle('on',(inst.get(id)?.size||0)>0);
   el.classList.toggle('sel',id===cur);
 }
+const duckN=new Map(), DUCK=0.25;
+const vf=id=>(duckN.get(id)>0?DUCK:1);
 function applyVol(id){
   const c=ac(),p=P(id);if(!p)return;
-  inst.get(id)?.forEach(x=>x.g.gain.setTargetAtTime(p.vol*master,c.currentTime,0.02));
+  inst.get(id)?.forEach(x=>{if(!x.stopping)x.g.gain.setTargetAtTime(p.vol*master*vf(id),c.currentTime,0.1)});
+}
+function releaseDucks(x){(x.ducks||[]).splice(0).forEach(t=>{duckN.set(t,Math.max(0,(duckN.get(t)||1)-1));applyVol(t)})}
+function fireNext(id){const p=P(id);if(p)p.links.filter(l=>l.a==='next').forEach(l=>trigger(l.t,new Set()))}
+function runLinks(p,x,chain){
+  p.links.forEach(l=>{
+    const t=P(l.t);if(!t||t.id===p.id)return;
+    if(l.a==='stop')stopPad(t.id);
+    else if(l.a==='cut')stopPad(t.id,true);
+    else if(l.a==='xf')stopPad(t.id,false,p.fi>0?p.fi:t.fo);
+    else if(l.a==='with')trigger(t.id,chain);
+    else if(l.a==='duck'){duckN.set(t.id,(duckN.get(t.id)||0)+1);(x.ducks||(x.ducks=[])).push(t.id);applyVol(t.id)}
+  });
 }
 
-async function trigger(id){
+async function trigger(id,chain){
   const p=P(id);
   if(!p)return;
-  if(!p.file){select(id);return}
+  const auto=!!chain;
+  if(!chain)chain=new Set();
+  if(chain.has(id))return;
+  chain.add(id);
+  if(!p.file){if(!auto)select(id);return}
   const set=inst.get(id)||new Set();
-  if(p.loop&&set.size){stopPad(id);return}
+  if(auto){if(set.size)return}
+  else if(p.loop&&set.size){stopPad(id);return}
   let url;
   try{url=await urlOf(id)}catch(e){url=null}
   if(!url){toast('音声ファイルが見つかりません');return}
-  (p.kills||[]).forEach(j=>{if(j!==id&&P(j))stopPad(j)});
 
   const c=ac();
   const a=new Audio(url);
@@ -251,7 +271,7 @@ async function trigger(id){
   const g=c.createGain();
   src.connect(g).connect(c.destination);
 
-  const target=p.vol*master, now=c.currentTime;
+  const target=p.vol*master*vf(id), now=c.currentTime;
   g.gain.setValueAtTime(p.fi>0?0:target,now);
   if(p.fi>0)g.gain.linearRampToValueAtTime(target,now+p.fi);
 
@@ -260,13 +280,15 @@ async function trigger(id){
     const o=Math.min(p.off,Math.max(0,a.duration-0.05));
     if(o>0)a.currentTime=o;
   },{once:true});
-  a.onended=()=>finish(x);
+  a.onended=()=>{const nat=!x.stopping;finish(x);if(nat)fireNext(id)};
   set.add(x);inst.set(id,set);render(id);
-  if(p.ae>0){x.endAt=Date.now()+p.ae*1000;x.timer=setTimeout(()=>stopInst(x,p.fo),p.ae*1000);}
+  runLinks(p,x,chain);
+  if(p.ae>0){x.endAt=Date.now()+p.ae*1000;x.timer=setTimeout(()=>{stopInst(x,p.fo);fireNext(id)},p.ae*1000);}
   try{await a.play()}catch(e){finish(x);toast('再生できませんでした')}
 }
 
 function finish(x){
+  releaseDucks(x);
   const s=inst.get(x.i);
   if(s)s.delete(x);
   clearTimeout(x.timer);
@@ -275,6 +297,7 @@ function finish(x){
   render(x.i);
 }
 function stopInst(x,fo){
+  releaseDucks(x);
   if(x.stopping)return;
   x.stopping=true;
   if(!(fo>0)){finish(x);return}
@@ -284,28 +307,56 @@ function stopInst(x,fo){
   x.g.gain.linearRampToValueAtTime(0,now+fo);
   setTimeout(()=>finish(x),fo*1000+30);
 }
-function stopPad(id,instant){const p=P(id);inst.get(id)?.forEach(x=>stopInst(x,instant||!p?0:p.fo))}
+function stopPad(id,instant,fo){const p=P(id);inst.get(id)?.forEach(x=>stopInst(x,instant||!p?0:(fo??p.fo)))}
 function stopAll(){inst.forEach((_,id)=>stopPad(id))}
 
+const ACTS=[
+ {k:'stop',l:'止める（フェードアウト）',d:'相手をフェードアウトして止めます。秒数は相手のフェードアウト設定です。'},
+ {k:'xf',l:'クロスフェードで入れ替える',d:'このパッドのフェードイン秒数をかけて相手を消します。曲の入れ替えに。'},
+ {k:'cut',l:'すぐ止める',d:'相手をフェードなしで止めます。'},
+ {k:'with',l:'同時に鳴らす',d:'相手も同時に鳴らします。'},
+ {k:'next',l:'終わったら鳴らす',d:'このパッドが終わったら（自動終了も含む）相手を鳴らします。'},
+ {k:'duck',l:'音量を下げる',d:'このパッドが鳴っている間だけ、相手の音量を25%に下げます。'}
+];
 function renderKill(){
-  const kg=$('kg');kg.innerHTML='';
+  const box=$('lk');box.innerHTML='';
   const cp=P(cur);if(!cp)return;
-  const ks=cp.kills||(cp.kills=[]);
-  pads.forEach(q=>{
-    const b=document.createElement('button');
-    b.type='button';
-    const k=document.createElement('b');k.textContent=keyLabel(q.id);
-    b.appendChild(k);
-    b.appendChild(document.createTextNode(q.name||(q.file?'(無名)':'空き')));
-    b.disabled=q.id===cur;
-    b.classList.toggle('sel',ks.includes(q.id));
-    b.onclick=()=>{
-      cp.kills=ks.includes(q.id)?ks.filter(x=>x!==q.id):[...ks,q.id];
-      save();renderKill();render(cur);
-    };
-    kg.appendChild(b);
+  $('kadd').disabled=pads.length<2;
+  if(!cp.links.length){
+    const e=document.createElement('div');e.className='khelp';e.style.marginTop='8px';
+    e.textContent='連動は設定されていません。「＋追加」で作れます。';
+    box.appendChild(e);return;
+  }
+  const mkLabel=t=>{const l=document.createElement('small');l.textContent=t;return l};
+  cp.links.forEach((l,n)=>{
+    const row=document.createElement('div');row.className='lkrow';row.dataset.a=l.a;
+    const sp=document.createElement('select');
+    pads.filter(q=>q.id!==cur).forEach(q=>{
+      const o=document.createElement('option');o.value=q.id;
+      o.textContent=keyLabel(q.id)+'　'+(q.name||(q.file?'(無名)':'空き'));
+      sp.appendChild(o);
+    });
+    sp.value=l.t;
+    const sa=document.createElement('select');
+    ACTS.forEach(a=>{const o=document.createElement('option');o.value=a.k;o.textContent=a.l;sa.appendChild(o)});
+    sa.value=l.a;
+    const d=document.createElement('div');d.className='khelp';
+    const info=()=>{d.textContent=ACTS.find(a=>a.k===l.a).d};info();
+    sp.onchange=()=>{l.t=+sp.value;save();render(cur)};
+    sa.onchange=()=>{l.a=sa.value;row.dataset.a=l.a;info();save()};
+    const x=document.createElement('button');x.type='button';x.className='lkx';x.textContent='×';x.title='この連動を削除';
+    x.onclick=()=>{cp.links.splice(n,1);save();renderKill();render(cur)};
+    row.append(x,mkLabel('相手のパッド'),sp,mkLabel('どうする'),sa,d);
+    box.appendChild(row);
   });
 }
+$('kadd').onclick=()=>{
+  const cp=P(cur);
+  const o=pads.find(q=>q.id!==cur&&!cp.links.some(l=>l.t===q.id))||pads.find(q=>q.id!==cur);
+  if(!o)return;
+  cp.links.push({t:o.id,a:'stop'});
+  save();renderKill();render(cur);
+};
 
 function select(id){
   cur=id;
@@ -353,7 +404,7 @@ $('del').onclick=async()=>{
   revoke(id);
   const i=idx(id);
   pads.splice(i,1);
-  pads.forEach(q=>{q.kills=(q.kills||[]).filter(j=>j!==id)});
+  pads.forEach(q=>{q.links=q.links.filter(l=>l.t!==id)});
   save();buildGrid();
   select(pads[Math.min(i,pads.length-1)].id);
   toast('削除しました');
@@ -366,7 +417,6 @@ $('fi').oninput=()=>{P(cur).fi=num($('fi').value);save()};
 $('fo').oninput=()=>{P(cur).fo=num($('fo').value);save()};
 $('off').oninput=()=>{P(cur).off=num($('off').value);save()};
 $('ae').oninput=()=>{P(cur).ae=num($('ae').value);save()};
-$('kclr').onclick=()=>{P(cur).kills=[];save();renderKill();render(cur)};
 $('fl').onchange=async()=>{
   const f=$('fl').files[0];
   if(!f)return;
