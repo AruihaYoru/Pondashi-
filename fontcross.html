@@ -4,9 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Font Crosshatch Converter</title>
-    
-    <!-- 対策1: メインのCDNから読み込み -->
+
+    <!-- フォント読み込み・書き出し -->
     <script src="https://unpkg.com/opentype.js@2.0.0/dist/opentype.js"></script>
+    <!-- 輪郭どうしの交差計算（文字 ∩ 斜線）に使用 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/clipper-lib/6.4.2/clipper.js"></script>
 
     <style>
         body {
@@ -24,14 +26,8 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.05);
             margin-bottom: 20px;
         }
-        .control-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            font-weight: bold;
-            margin-bottom: 5px;
-        }
+        .control-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; }
         input[type="file"], textarea {
             width: 100%;
             padding: 10px;
@@ -39,10 +35,7 @@
             border-radius: 6px;
             box-sizing: border-box;
         }
-        textarea {
-            height: 80px;
-            resize: vertical;
-        }
+        textarea { height: 60px; resize: vertical; }
         button {
             background-color: #0071e3;
             color: white;
@@ -52,229 +45,345 @@
             cursor: pointer;
             font-weight: bold;
         }
-        button:hover {
-            background-color: #0077ed;
-        }
-        button:disabled {
-            background-color: #ccc;
-            cursor: not-allowed;
-        }
+        button:hover { background-color: #0077ed; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
         #error-msg {
             color: #ff3b30;
             font-weight: bold;
             margin-bottom: 15px;
             display: none;
         }
-        #output-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 15px;
+        #font-info, #progress { margin-top: 8px; font-size: 14px; color: #555; }
+        #download-link {
+            display: inline-block;
+            background: #34c759;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 6px;
+            text-decoration: none;
+            font-weight: bold;
+        }
+        #preview {
             margin-top: 20px;
-            background: #fff;
-            padding: 20px;
-            border-radius: 8px;
+            font-size: 96px;
+            line-height: 1.2;
             border: 1px solid #ddd;
-            min-height: 100px;
-        }
-        .glyph-box {
-            text-align: center;
-            border: 1px solid #eee;
-            padding: 10px;
-            background: #fafafa;
-            border-radius: 4px;
-        }
-        .glyph-box svg {
-            background: white;
-            border: 1px solid #e0e0e0;
-        }
-        .char-label {
-            font-size: 12px;
-            color: #666;
-            margin-top: 5px;
+            border-radius: 8px;
+            padding: 20px;
+            background: #fff;
         }
     </style>
 </head>
 <body>
 
     <h1>Font Crosshatch Converter</h1>
-    <div id="error-msg">⚠️ 外部ライブラリ（opentype.js）の読み込みに失敗しました。インターネット接続を確認するか、数秒待ってページを再読み込みしてください。</div>
-    
-    <p>フォント（OTF/TTF）を読み込み、指定された文字のみを「上部100%〜下部20%」の密度を持つクロスハッチベクターに変換します。</p>
+    <div id="error-msg"></div>
+
+    <p>
+        フォント（OTF/TTF）を読み込み、JIS第一水準漢字・ひらがな・カタカナ・記号のグリフだけを
+        「上部100%〜下部20%」の密度のクロスハッチに変換して、新しい OTF として書き出します。
+    </p>
 
     <div class="card">
         <div class="control-group">
             <label for="font-file">1. フォントファイルを選択 (.otf / .ttf)</label>
             <input type="file" id="font-file" accept=".otf,.ttf">
+            <div id="font-info"></div>
         </div>
 
         <div class="control-group">
-            <label for="text-input">2. 変換したい文字列を入力（自動でJIS第1水準・ひらがな・カタカナ・記号のみ抽出されます）</label>
-            <textarea id="text-input">あア亜①、。クロスハッチテスト</textarea>
+            <label for="extra-chars">2. 追加で変換したい文字（任意）</label>
+            <textarea id="extra-chars" placeholder="例: ※★"></textarea>
         </div>
 
-        <button id="process-btn" disabled>ライブラリ準備中...</button>
+        <button id="convert-btn" disabled>ライブラリ準備中...</button>
+        <div id="progress"></div>
     </div>
 
-    <h2>変換結果 (SVG)</h2>
-    <div id="output-container">フォントファイルを選択して変換ボタンを押してください。</div>
+    <div class="card" id="result-card" style="display:none;">
+        <a id="download-link" href="#" download>OTFをダウンロード</a>
+        <div id="preview">亜あア①克ロ</div>
+    </div>
 
 <script>
-// ページ読み込み完了時にライブラリが存在するか最終チェック
+const SCALE = 10; // Clipper は整数座標が必要なので、小数を保つため拡大する
+
+const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+
+let loadedFont = null;
+let loadedName = 'font';
+
+// ---------- 起動時チェック ----------
 window.addEventListener('DOMContentLoaded', () => {
-    const btn = document.getElementById('process-btn');
-    const errorMsg = document.getElementById('error-msg');
-    
-    if (typeof opentype !== 'undefined') {
-        btn.disabled = false;
-        btn.innerText = "クロスハッチに変換";
+    const btn = $('convert-btn');
+    if (typeof opentype !== 'undefined' && typeof ClipperLib !== 'undefined') {
+        btn.innerText = '変換してOTFを作成';
     } else {
-        errorMsg.style.display = 'block';
-        btn.innerText = "利用不可（エラー）";
+        $('error-msg').style.display = 'block';
+        $('error-msg').innerText = '⚠️ 外部ライブラリの読み込みに失敗しました。ネット接続を確認して再読み込みしてください。';
+        btn.innerText = '利用不可（エラー）';
     }
 });
 
-function isTargetChar(char) {
-    const code = char.charCodeAt(0);
-    if (code >= 0x3040 && code <= 0x309F) return true; // ひらがな
-    if (code >= 0x30A0 && code <= 0x30FF) return true; // カタカナ
-    if ((code >= 0x2000 && code <= 0x2BFF) || (code >= 0x3000 && code <= 0x303F) || (code >= 0xFF00 && code <= 0xFFEF)) return true; // 記号
-    if (code >= 0x4E00 && code <= 0x9FAF) return true; // 主要漢字（JIS第一水準含む）
-    return false;
+// ---------- JIS第一水準などの対象文字を自動生成 ----------
+// Shift_JIS の行構成を利用する：
+//   0x88〜0x9F のリード바이트 = JIS X 0208 の第一水準漢字（16〜47区）
+//   0x81 = 記号、0x82 = 全角英数・ひらがな、0x83 = カタカナ
+function buildTargetChars() {
+    const dec = new TextDecoder('shift_jis');
+    const leads = [0x81, 0x82, 0x83];
+    for (let l = 0x88; l <= 0x9F; l++) leads.push(l);
+
+    const chars = new Set();
+    for (const lead of leads) {
+        for (let trail = 0x40; trail <= 0xFC; trail++) {
+            if (trail === 0x7F) continue;
+            const s = dec.decode(new Uint8Array([lead, trail]));
+            if (s.length !== 1 || s === '\uFFFD') continue;
+
+            const cp = s.codePointAt(0);
+            const isKanji  = lead >= 0x88 && cp >= 0x4E00 && cp <= 0x9FFF;
+            const isKana   = (cp >= 0x3041 && cp <= 0x3093) || (cp >= 0x30A1 && cp <= 0x30F6);
+            const isSymbol = lead === 0x81 || (cp >= 0xFF01 && cp <= 0xFF5E);
+            if (isKanji || isKana || isSymbol) chars.add(s);
+        }
+    }
+    return chars;
 }
 
-let loadedFont = null;
+// ---------- パス → ポリゴン（曲線は直線に分割） ----------
+function pathToRings(path) {
+    const rings = [];
+    let cur = null;
+    let cx = 0, cy = 0, sx = 0, sy = 0;
 
-document.getElementById('font-file').addEventListener('change', function(e) {
+    for (const c of path.commands) {
+        if (c.type === 'M') {
+            cur = [{ x: c.x, y: c.y }];
+            rings.push(cur);
+            cx = sx = c.x; cy = sy = c.y;
+        } else if (c.type === 'L') {
+            if (!cur) continue;
+            cur.push({ x: c.x, y: c.y });
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'Q') {
+            if (!cur) continue;
+            for (let k = 1; k <= 8; k++) {
+                const t = k / 8, mt = 1 - t;
+                cur.push({
+                    x: mt * mt * cx + 2 * mt * t * c.x1 + t * t * c.x,
+                    y: mt * mt * cy + 2 * mt * t * c.y1 + t * t * c.y
+                });
+            }
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'C') {
+            if (!cur) continue;
+            for (let k = 1; k <= 10; k++) {
+                const t = k / 10, mt = 1 - t;
+                const a = mt * mt * mt, b = 3 * mt * mt * t, d = 3 * mt * t * t, e = t * t * t;
+                cur.push({
+                    x: a * cx + b * c.x1 + d * c.x2 + e * c.x,
+                    y: a * cy + b * c.y1 + d * c.y2 + e * c.y
+                });
+            }
+            cx = c.x; cy = c.y;
+        } else if (c.type === 'Z') {
+            cx = sx; cy = sy;
+        }
+    }
+    return rings.filter(r => r.length >= 3);
+}
+
+function ringsToClipper(rings) {
+    return rings.map(r => r.map(p => ({ X: Math.round(p.x * SCALE), Y: Math.round(p.y * SCALE) })));
+}
+
+// ---------- 斜線の生成（全グリフ共通なので一度だけ作る） ----------
+// 密度の考え方：
+//   目標カバー率 C は上端で 1.0、下端で 0.2 に線形変化させる。
+//   斜線は2方向（/ と \）を重ねるので、1方向あたりの被覆率 c は
+//   1 - (1 - c)^2 = C を満たすように c = 1 - sqrt(1 - C) とする。
+//   各斜線の幅を y に応じて変えることで、上ほど太く・下ほど細くなる。
+function buildHatchClip(font) {
+    const upm = font.unitsPerEm;
+    const yTop = font.ascender;
+    const yBot = font.descender;
+    const pitch = upm / 30;               // 斜線の間隔
+    const cx = upm / 2;
+    const cy = (yTop + yBot) / 2;
+    const L = upm * 1.2;                  // 文字を十分覆う長さ
+    const K = Math.ceil(L / pitch) + 2;
+
+    const coverageAt = y => {
+        const t = clamp((yTop - y) / (yTop - yBot), 0, 1); // 上=0, 下=1
+        const C = 1 - 0.8 * t;                              // 1.0 → 0.2
+        return 1 - Math.sqrt(1 - C);                        // 1方向あたりの被覆率
+    };
+
+    const polys = [];
+    for (const ang of [Math.PI / 4, -Math.PI / 4]) {
+        const u = { x: Math.cos(ang), y: Math.sin(ang) };
+        const n = { x: -u.y, y: u.x };
+
+        for (let k = -K; k <= K; k++) {
+            const bx = cx + n.x * k * pitch;
+            const by = cy + n.y * k * pitch;
+            const left = [], right = [];
+            const STEPS = 12;
+
+            for (let j = 0; j <= STEPS; j++) {
+                const s = -L + (2 * L) * j / STEPS;
+                const px = bx + u.x * s;
+                const py = by + u.y * s;
+                const h = pitch * coverageAt(py) / 2;
+                left.push({ x: px + n.x * h, y: py + n.y * h });
+                right.push({ x: px - n.x * h, y: py - n.y * h });
+            }
+            polys.push(left.concat(right.reverse()));
+        }
+    }
+    return ringsToClipper(polys);
+}
+
+// ---------- グリフを斜線で切り抜く（文字 ∩ 斜線） ----------
+function hatchGlyph(path, clipPolys) {
+    const subj = ringsToClipper(pathToRings(path));
+    const out = new opentype.Path();
+    if (subj.length === 0) return out;
+
+    const cpr = new ClipperLib.Clipper();
+    cpr.AddPaths(subj, ClipperLib.PolyType.ptSubject, true);
+    cpr.AddPaths(clipPolys, ClipperLib.PolyType.ptClip, true);
+
+    const sol = [];
+    cpr.Execute(
+        ClipperLib.ClipType.ctIntersection,
+        sol,
+        ClipperLib.PolyFillType.pftNonZero,
+        ClipperLib.PolyFillType.pftNonZero
+    );
+
+    for (const poly of sol) {
+        if (poly.length < 3) continue;
+        out.moveTo(poly[0].X / SCALE, poly[0].Y / SCALE);
+        for (let i = 1; i < poly.length; i++) {
+            out.lineTo(poly[i].X / SCALE, poly[i].Y / SCALE);
+        }
+        out.close();
+    }
+    return out;
+}
+
+// 対象外グリフ：立方曲線だけ直線に分解して、出力フォーマットに合わせる
+function copyPath(path) {
+    if (!path.commands.some(c => c.type === 'C')) return path;
+    const out = new opentype.Path();
+    for (const ring of pathToRings(path)) {
+        ring.forEach((p, i) => (i === 0 ? out.moveTo(p.x, p.y) : out.lineTo(p.x, p.y)));
+        out.close();
+    }
+    return out;
+}
+
+// ---------- フォント読み込み ----------
+$('font-file').addEventListener('change', async e => {
     const file = e.target.files[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = function(event) {
-        try {
-            if (typeof opentype === 'undefined') {
-                throw new Error("opentype.js が読み込まれていません。");
-            }
-            loadedFont = opentype.parse(event.target.result);
-            alert("フォントの読み込みに成功しました！");
-        } catch (err) {
-            alert("フォントの解析に失敗しました: " + err.message);
-        }
-    };
-    reader.readAsArrayBuffer(file);
+    try {
+        const buf = await file.arrayBuffer();
+        loadedFont = opentype.parse(buf);
+        loadedName = file.name.replace(/\.(otf|ttf)$/i, '');
+        $('font-info').innerText = `読み込み成功: ${loadedFont.numGlyphs} グリフ / UPM ${loadedFont.unitsPerEm}`;
+        $('convert-btn').disabled = false;
+    } catch (err) {
+        loadedFont = null;
+        $('convert-btn').disabled = true;
+        alert('フォントの解析に失敗しました: ' + err.message);
+    }
 });
 
-document.getElementById('process-btn').addEventListener('click', function() {
+// ---------- 変換 → OTF出力 ----------
+$('convert-btn').addEventListener('click', async () => {
     if (!loadedFont) {
-        alert("先にフォントファイルを読み込んでください。");
+        alert('先にフォントファイルを読み込んでください。');
         return;
     }
 
-    const inputText = document.getElementById('text-input').value;
-    const container = document.getElementById('output-container');
-    container.innerHTML = ''; 
+    const btn = $('convert-btn');
+    btn.disabled = true;
+    const font = loadedFont;
 
-    const uniqueChars = Array.from(new Set(inputText.split('')));
+    try {
+        // 対象文字 → グリフIDの集合
+        const targetChars = buildTargetChars();
+        for (const ch of $('extra-chars').value) targetChars.add(ch);
 
-    uniqueChars.forEach((char, index) => {
-        if (!isTargetChar(char)) return; 
-
-        const fontScale = 500;
-        const glyph = loadedFont.charToGlyph(char);
-        
-        if (!glyph || !glyph.unicode) return;
-
-        const path = loadedFont.getPath(char, 50, 400, fontScale);
-        const svgPathData = path.toPathData(3);
-
-        const svgNS = "http://w3.org";
-        const svg = document.createElementNS(svgNS, "svg");
-        svg.setAttribute("width", "120");
-        svg.setAttribute("height", "120");
-        svg.setAttribute("viewBox", "0 0 600 600");
-
-        const defs = document.createElementNS(svgNS, "defs");
-        const clipPath = document.createElementNS(svgNS, "clipPath");
-        const clipId = `clip-${index}`;
-        clipPath.setAttribute("id", clipId);
-        
-        const pathElement = document.createElementNS(svgNS, "path");
-        pathElement.setAttribute("d", svgPathData);
-        clipPath.appendChild(pathElement);
-        defs.appendChild(clipPath);
-        svg.appendChild(defs);
-
-        const g = document.createElementNS(svgNS, "g");
-        g.setAttribute("clip-path", `url(#${clipId})`);
-
-        const startY = 50;
-        const endY = 550;
-        let currentY = startY;
-
-        const maxDensityGap = 4;   
-        const minDensityGap = 24;  
-
-        while (currentY <= endY) {
-            const t = (currentY - startY) / (endY - startY);
-            const currentGap = maxDensityGap + (minDensityGap - maxDensityGap) * t;
-
-            // 右下がりの斜線
-            const line1 = document.createElementNS(svgNS, "line");
-            line1.setAttribute("x1", "0");
-            line1.setAttribute("y1", currentY.toString());
-            line1.setAttribute("x2", "600");
-            line1.setAttribute("y2", (currentY + 600).toString());
-            line1.setAttribute("stroke", "black");
-            line1.setAttribute("stroke-width", "1.5");
-            g.appendChild(line1);
-
-            // 左下がりの斜線
-            const line2 = document.createElementNS(svgNS, "line");
-            line2.setAttribute("x1", "600");
-            line2.setAttribute("y1", currentY.toString());
-            line2.setAttribute("x2", "0");
-            line2.setAttribute("y2", (currentY + 600).toString());
-            line2.setAttribute("stroke", "black");
-            line2.setAttribute("stroke-width", "1.5");
-            g.appendChild(line2);
-
-            // マイナス方向カバー
-            const line1Neg = document.createElementNS(svgNS, "line");
-            line1Neg.setAttribute("x1", "0");
-            line1Neg.setAttribute("y1", currentY.toString());
-            line1Neg.setAttribute("x2", "600");
-            line1Neg.setAttribute("y2", (currentY - 600).toString());
-            line1Neg.setAttribute("stroke", "black");
-            line1Neg.setAttribute("stroke-width", "1.5");
-            g.appendChild(line1Neg);
-
-            const line2Neg = document.createElementNS(svgNS, "line");
-            line2Neg.setAttribute("x1", "600");
-            line2Neg.setAttribute("y1", currentY.toString());
-            line2Neg.setAttribute("x2", "0");
-            line2Neg.setAttribute("y2", (currentY - 600).toString());
-            line2Neg.setAttribute("stroke", "black");
-            line2Neg.setAttribute("stroke-width", "1.5");
-            g.appendChild(line2Neg);
-
-            currentY += currentGap;
+        const targetIds = new Set();
+        for (const ch of targetChars) {
+            const gi = font.charToGlyphIndex(ch);
+            if (gi > 0) targetIds.add(gi);
         }
 
-        svg.appendChild(g);
+        const clipPolys = buildHatchClip(font);
+        const newGlyphs = [];
+        const n = font.numGlyphs;
 
-        const box = document.createElement("div");
-        box.className = "glyph-box";
-        box.appendChild(svg);
-        
-        const label = document.createElement("div");
-        label.className = "char-label";
-        label.innerText = char;
-        box.appendChild(label);
+        for (let i = 0; i < n; i++) {
+            const g = font.glyphs.get(i);
+            const src = g.path || new opentype.Path();
+            const path = targetIds.has(i) ? hatchGlyph(src, clipPolys) : copyPath(src);
 
-        container.appendChild(box);
-    });
+            newGlyphs.push(new opentype.Glyph({
+                name: g.name,
+                unicode: g.unicode,
+                unicodes: g.unicodes,
+                advanceWidth: g.advanceWidth,
+                path: path
+            }));
 
-    if (container.children.length === 0) {
-        container.innerText = "変換対象の文字が見つかりませんでした。";
+            if (i % 50 === 0) {
+                $('progress').innerText = `変換中… ${i} / ${n}（対象 ${targetIds.size} 文字）`;
+                await sleep(0); // UIを固まらせない
+            }
+        }
+
+        const outFont = new opentype.Font({
+            familyName: loadedName + ' Crosshatch',
+            styleName: 'Regular',
+            unitsPerEm: font.unitsPerEm,
+            ascender: font.ascender,
+            descender: font.descender,
+            glyphs: newGlyphs
+        });
+
+        const outBuf = outFont.toArrayBuffer();
+
+        // ダウンロード
+        const blob = new Blob([outBuf], { type: 'font/otf' });
+        const link = $('download-link');
+        link.href = URL.createObjectURL(blob);
+        link.download = loadedName + '_crosshatch.otf';
+
+        // プレビュー（変換後のフォントを読み込んで表示）
+        try {
+            const ff = new FontFace('CrosshatchPreview', outBuf);
+            await ff.load();
+            document.fonts.add(ff);
+            $('preview').style.fontFamily = "'CrosshatchPreview', sans-serif";
+        } catch (_) {
+            // プレビューに失敗してもダウンロードは可能
+        }
+
+        $('result-card').style.display = 'block';
+        $('progress').innerText = `完了: ${targetIds.size} 文字を変換しました。`;
+    } catch (err) {
+        console.error(err);
+        alert('変換中にエラーが発生しました: ' + err.message);
+        $('progress').innerText = '';
+    } finally {
+        btn.disabled = false;
     }
 });
 </script>
