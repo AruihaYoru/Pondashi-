@@ -4,14 +4,23 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Font Crosshatch Converter</title>
-    <!-- opentype.js をCDNから読み込み -->
+    
+    <!-- 対策1: メインのCDNから読み込み -->
     <script src="https://cloudflare.com"></script>
+    
+    <!-- 対策2: 万が一上記がつながらなかった場合のフォールバック（予備） -->
+    <script>
+        if (typeof opentype === 'undefined') {
+            document.write('<script src="https://unpkg.com"><\/script>');
+        }
+    </script>
+
     <style>
         body {
             font-family: 'Helvetica Neue', Arial, sans-serif;
             background-color: #f5f5f7;
             color: #333;
-            padding: 300px;
+            padding: 40px 20px;
             max-width: 900px;
             margin: 0 auto;
         }
@@ -53,6 +62,16 @@
         button:hover {
             background-color: #0077ed;
         }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #error-msg {
+            color: #ff3b30;
+            font-weight: bold;
+            margin-bottom: 15px;
+            display: none;
+        }
         #output-container {
             display: flex;
             flex-wrap: wrap;
@@ -85,6 +104,8 @@
 <body>
 
     <h1>Font Crosshatch Converter</h1>
+    <div id="error-msg">⚠️ 外部ライブラリ（opentype.js）の読み込みに失敗しました。インターネット接続を確認するか、数秒待ってページを再読み込みしてください。</div>
+    
     <p>フォント（OTF/TTF）を読み込み、指定された文字のみを「上部100%〜下部20%」の密度を持つクロスハッチベクターに変換します。</p>
 
     <div class="card">
@@ -98,39 +119,38 @@
             <textarea id="text-input">あア亜①、。クロスハッチテスト</textarea>
         </div>
 
-        <button id="process-btn">クロスハッチに変換</button>
+        <button id="process-btn" disabled>ライブラリ準備中...</button>
     </div>
 
     <h2>変換結果 (SVG)</h2>
     <div id="output-container">フォントファイルを選択して変換ボタンを押してください。</div>
 
 <script>
-// JIS第一水準漢字の区点コード範囲から正規表現パターンを作成
-// 点画や判定を簡単にするため、UnicodeのブロックやJIS第一水準の一般的な文字判定を組み込み
+// ページ読み込み完了時にライブラリが存在するか最終チェック
+window.addEventListener('DOMContentLoaded', () => {
+    const btn = document.getElementById('process-btn');
+    const errorMsg = document.getElementById('error-msg');
+    
+    if (typeof opentype !== 'undefined') {
+        btn.disabled = false;
+        btn.innerText = "クロスハッチに変換";
+    } else {
+        errorMsg.style.display = 'block';
+        btn.innerText = "利用不可（エラー）";
+    }
+});
+
 function isTargetChar(char) {
     const code = char.charCodeAt(0);
-    
-    // ひらがな (U+3040 - U+309F)
-    if (code >= 0x3040 && code <= 0x309F) return true;
-    // カタカナ (U+30A0 - U+30FF)
-    if (code >= 0x30A0 && code <= 0x30FF) return true;
-    // 各種記号・全角記号・一般記号 (各種Unicode範囲)
-    if ((code >= 0x2000 && code <= 0x2BFF) || (code >= 0x3000 && code <= 0x303F) || (code >= 0xFF00 && code <= 0xFFEF)) return true;
-    
-    // 簡易的なJIS第一水準・主要漢字判定 (CJK統合漢字 U+4E00 - U+9FFF の一部)
-    // 本来は3965文字のマッピングテーブルが必要ですが、ここでは一般的な漢字判定を含めます
-    if (code >= 0x4E00 && code <= 0x9FAF) {
-        // ※厳密なJIS第一水準のみに絞る場合はここに文字リストを突合させますが、
-        // 今回はターゲットとなる主要な漢字全般（第一水準含む）を通す設計にしています。
-        return true;
-    }
-    
+    if (code >= 0x3040 && code <= 0x309F) return true; // ひらがな
+    if (code >= 0x30A0 && code <= 0x30FF) return true; // カタカナ
+    if ((code >= 0x2000 && code <= 0x2BFF) || (code >= 0x3000 && code <= 0x303F) || (code >= 0xFF00 && code <= 0xFFEF)) return true; // 記号
+    if (code >= 0x4E00 && code <= 0x9FAF) return true; // 主要漢字（JIS第一水準含む）
     return false;
 }
 
 let loadedFont = null;
 
-// フォントファイルの読み込み
 document.getElementById('font-file').addEventListener('change', function(e) {
     const file = e.target.files[0];
     if (!file) return;
@@ -138,6 +158,9 @@ document.getElementById('font-file').addEventListener('change', function(e) {
     const reader = new FileReader();
     reader.onload = function(event) {
         try {
+            if (typeof opentype === 'undefined') {
+                throw new Error("opentype.js が読み込まれていません。");
+            }
             loadedFont = opentype.parse(event.target.result);
             alert("フォントの読み込みに成功しました！");
         } catch (err) {
@@ -147,7 +170,6 @@ document.getElementById('font-file').addEventListener('change', function(e) {
     reader.readAsArrayBuffer(file);
 });
 
-// 変換処理
 document.getElementById('process-btn').addEventListener('click', function() {
     if (!loadedFont) {
         alert("先にフォントファイルを読み込んでください。");
@@ -156,33 +178,27 @@ document.getElementById('process-btn').addEventListener('click', function() {
 
     const inputText = document.getElementById('text-input').value;
     const container = document.getElementById('output-container');
-    container.innerHTML = ''; // クリア
+    container.innerHTML = ''; 
 
-    // 重複を排除して1文字ずつ処理
     const uniqueChars = Array.from(new Set(inputText.split('')));
 
     uniqueChars.forEach((char, index) => {
-        if (!isTargetChar(char)) return; // 対象外の文字（英数字など）はスキップ
+        if (!isTargetChar(char)) return; 
 
-        // opentype.js で文字のパスを取得 (標準サイズ 1000px ベース)
         const fontScale = 500;
         const glyph = loadedFont.charToGlyph(char);
         
         if (!glyph || !glyph.unicode) return;
 
-        // グリフのバウンディングボックスを取得
-        const metrics = glyph.getMetrics();
         const path = loadedFont.getPath(char, 50, 400, fontScale);
         const svgPathData = path.toPathData(3);
 
-        // SVG要素の作成
         const svgNS = "http://w3.org";
         const svg = document.createElementNS(svgNS, "svg");
         svg.setAttribute("width", "120");
         svg.setAttribute("height", "120");
         svg.setAttribute("viewBox", "0 0 600 600");
 
-        // クリップパス（文字の形）の定義
         const defs = document.createElementNS(svgNS, "defs");
         const clipPath = document.createElementNS(svgNS, "clipPath");
         const clipId = `clip-${index}`;
@@ -194,27 +210,21 @@ document.getElementById('process-btn').addEventListener('click', function() {
         defs.appendChild(clipPath);
         svg.appendChild(defs);
 
-        // クロスハッチを内包するグループ（文字の形に切り抜く）
         const g = document.createElementNS(svgNS, "g");
         g.setAttribute("clip-path", `url(#${clipId})`);
 
-        // クロスハッチ線の生成 (上部 100% 密 〜 下部 20% 密)
-        // Y座標 0 が上部、600 が下部として計算
         const startY = 50;
         const endY = 550;
         let currentY = startY;
 
-        const maxDensityGap = 4;   // 上部の線の間隔（狭い＝高密度 100%）
-        const minDensityGap = 24;  // 下部の線の間隔（広い＝低密度 20%）
+        const maxDensityGap = 4;   
+        const minDensityGap = 24;  
 
-        // Y座標に応じて徐々に間隔を広げながらハッチングの交点を決める
         while (currentY <= endY) {
-            // 現在のY位置における密度の割合を計算 (0.0 = 上部, 1.0 = 下部)
             const t = (currentY - startY) / (endY - startY);
-            // 線の間隔を線形補間 (上部 4px から 下部 24px へ変化)
             const currentGap = maxDensityGap + (minDensityGap - maxDensityGap) * t;
 
-            // 右下がりの斜線 ( \ )
+            // 右下がりの斜線
             const line1 = document.createElementNS(svgNS, "line");
             line1.setAttribute("x1", "0");
             line1.setAttribute("y1", currentY.toString());
@@ -224,7 +234,7 @@ document.getElementById('process-btn').addEventListener('click', function() {
             line1.setAttribute("stroke-width", "1.5");
             g.appendChild(line1);
 
-            // 左下がりの斜線 ( / )
+            // 左下がりの斜線
             const line2 = document.createElementNS(svgNS, "line");
             line2.setAttribute("x1", "600");
             line2.setAttribute("y1", currentY.toString());
@@ -234,7 +244,7 @@ document.getElementById('process-btn').addEventListener('click', function() {
             line2.setAttribute("stroke-width", "1.5");
             g.appendChild(line2);
 
-            // 反対方向（マイナス側）へのハッチングカバー
+            // マイナス方向カバー
             const line1Neg = document.createElementNS(svgNS, "line");
             line1Neg.setAttribute("x1", "0");
             line1Neg.setAttribute("y1", currentY.toString());
@@ -258,7 +268,6 @@ document.getElementById('process-btn').addEventListener('click', function() {
 
         svg.appendChild(g);
 
-        // 画面表示用のラッパー
         const box = document.createElement("div");
         box.className = "glyph-box";
         box.appendChild(svg);
@@ -272,7 +281,7 @@ document.getElementById('process-btn').addEventListener('click', function() {
     });
 
     if (container.children.length === 0) {
-        container.innerText = "変換対象の文字（JIS第1水準漢字・ひらがな・カタカナ・記号）が見つかりませんでした。";
+        container.innerText = "変換対象の文字が見つかりませんでした。";
     }
 });
 </script>
