@@ -18,6 +18,7 @@ button,input[type=text],input[type=number]{font:inherit;color:var(--text);backgr
 button{cursor:pointer}
 button:hover{border-color:var(--acc)}
 .danger{color:#e5484d}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
 .bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 16px;border-bottom:1px solid var(--line)}
 #now{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
 .tm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--sub)}
@@ -69,16 +70,24 @@ aside input[type=checkbox]{accent-color:var(--acc)}
 .lkx{position:absolute;top:4px;right:6px;padding:0 8px;font-size:16px;line-height:1.4}
 .lkrow[data-a=stop]{border-left-color:#e5484d}.lkrow[data-a=xf]{border-left-color:#d97b00}.lkrow[data-a=cut]{border-left-color:#8f3b3f}
 .lkrow[data-a=with]{border-left-color:#30a46c}.lkrow[data-a=next]{border-left-color:#6e56cf}.lkrow[data-a=duck]{border-left-color:#0090ff}
-#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:88vw;text-align:center}
 #toast.show{opacity:1}
 .hint{font-size:12px;color:var(--sub);text-align:center;padding:0 16px 24px;line-height:1.7}
 </style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
 <header>
   <h1>ポン出しパッド</h1>
   <label class="ctl">音量 <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
   <button id="stopAll">■ 全停止</button>
+  <div class="sep"></div>
+  <button id="fsSave" title="選択したフォルダに設定と音声を個別ファイルで保存">📁 フォルダ保存</button>
+  <button id="fsLoad" title="フォルダから設定と音声を読み込み（無いファイルは一覧表示）">📂 フォルダ読込</button>
+  <button id="expZip" title="設定と音声ファイル本体をZIPにまとめてダウンロード（他PCへの持ち出し用）">📦 ZIP書き出し</button>
+  <button id="impZip" title="ZIPから設定と音声を復元">📦 ZIP読み込み</button>
+  <input type="file" id="impFile" accept=".zip,application/zip" hidden>
+  <div class="sep"></div>
   <button id="reset" class="danger">全消去</button>
 </header>
 <div class="bar">
@@ -137,7 +146,8 @@ aside input[type=checkbox]{accent-color:var(--acc)}
 <p class="hint">
   パッド本体タップ or ▶で再生（ループ中は再生ボタンで停止）／ ■ でフェードアウト停止／ ⚙ でプロパティを表示／ ＋ でパッド追加<br>
   キーボード: 1 2 3 4 / q w e r / a s d f / z x c v（先頭16個）、Space で全停止<br>
-  動画ファイルは音声のみ再生します。設定と音声データはこのブラウザ内に保存されます。
+  「📁フォルダ保存／読込」は選んだフォルダに設定＋音声を個別ファイルとして保存します（対応ブラウザのみ）。読込時、フォルダ内に見つからないファイルは一覧で通知します。<br>
+  「📦ZIP書き出し／読み込み」は音声ファイルをそのままの形式でZIPにまとめます。他のPCへ音声ファイルごと持ち出したいときはこちら（全ブラウザで使用可。解凍すれば音声ファイル単体としても取り出せます）。
 </p>
 <div id="toast"></div>
 
@@ -160,34 +170,41 @@ const idx=id=>pads.findIndex(p=>p.id===id);
 const padEl=id=>grid.querySelector('.pad[data-id="'+id+'"]');
 const keyLabel=id=>{const i=idx(id);return KEYS[i]?KEYS[i].toUpperCase():String(i+1)};
 
-function defPad(id,i){return{id,name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:'',links:[]}}
+function defPad(id,i){return{id,name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:'',links:[],fsFile:''}}
 function load(){
   try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length)return s.map((p,i)=>{const q={...defPad(i,i),...p,id:p.id??i};if(!Array.isArray(p.links))q.links=(p.kills||[]).map(t=>({t,a:'stop'}));delete q.kills;return q})}catch(e){}
   return Array.from({length:16},(_,i)=>defPad(i,i));
 }
 function save(){try{localStorage.setItem(KEY,JSON.stringify(pads))}catch(e){toast('設定を保存できませんでした')}}
-function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),1800)}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600)}
 const num=v=>Math.max(0,Math.round((+v||0)*100)/100);
+const padMeta=({id,name,color,vol,loop,fi,fo,off,ae,file,kind,links,fsFile})=>({id,name,color,vol,loop,fi,fo,off,ae,file,kind,links,fsFile});
 
 function openDB(){
   return new Promise((res,rej)=>{
-    const r=indexedDB.open(DBN,1);
-    r.onupgradeneeded=()=>r.result.createObjectStore('files');
+    const r=indexedDB.open(DBN,2);
+    r.onupgradeneeded=()=>{
+      const d=r.result;
+      if(!d.objectStoreNames.contains('files'))d.createObjectStore('files');
+      if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta');
+    };
     r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
   });
 }
-function tx(mode,fn){
+function tx(store,mode,fn){
   return new Promise((res,rej)=>{
-    const t=db.transaction('files',mode);
-    const q=fn(t.objectStore('files'));
+    const t=db.transaction(store,mode);
+    const q=fn(t.objectStore(store));
     t.oncomplete=()=>res(q?q.result:undefined);
     t.onerror=()=>rej(t.error);
   });
 }
-const getBlob=i=>tx('readonly',s=>s.get(i));
-const putBlob=(i,b)=>tx('readwrite',s=>s.put(b,i));
-const delBlob=i=>tx('readwrite',s=>s.delete(i));
-const clearBlobs=()=>tx('readwrite',s=>s.clear());
+const getBlob=i=>tx('files','readonly',s=>s.get(i));
+const putBlob=(i,b)=>tx('files','readwrite',s=>s.put(b,i));
+const delBlob=i=>tx('files','readwrite',s=>s.delete(i));
+const clearBlobs=()=>tx('files','readwrite',s=>s.clear());
+const getMeta=k=>tx('meta','readonly',s=>s.get(k));
+const putMeta=(k,v)=>tx('meta','readwrite',s=>s.put(v,k));
 
 async function urlOf(i){
   if(!urls.has(i)){
@@ -445,6 +462,7 @@ $('fl').onchange=async()=>{
     const p=P(i);
     p.file=f.name;
     p.kind=(f.type.startsWith('video/')||/\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name))?'video':'audio';
+    p.fsFile='';
     save();select(i);
     toast('登録しました');
   }catch(e){toast('ファイルを保存できませんでした')}
@@ -454,17 +472,19 @@ $('clr').onclick=async()=>{
   stopPad(i,true);
   try{await delBlob(i)}catch(e){}
   revoke(i);
-  Object.assign(P(i),{file:'',kind:'',loop:false});
+  Object.assign(P(i),{file:'',kind:'',loop:false,fsFile:''});
   save();select(i);
 };
 
 $('master').oninput=e=>{master=+e.target.value;inst.forEach((_,id)=>applyVol(id))};
 $('stopAll').onclick=stopAll;
 $('reset').onclick=async()=>{
-  if(!confirm('全パッドの設定と音声ファイルを消去しますか？'))return;
+  if(!confirm('全パッドの設定と音声ファイルを消去しますか？（フォルダ連携も解除されます）'))return;
   inst.forEach((_,id)=>stopPad(id,true));
   urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
   try{await clearBlobs()}catch(e){}
+  try{await tx('meta','readwrite',s=>s.clear())}catch(e){}
+  dirHandle=null;
   localStorage.removeItem(KEY);
   pads=Array.from({length:16},(_,i)=>defPad(i,i));
   nextId=16;
@@ -480,6 +500,177 @@ document.addEventListener('keydown',e=>{
   if(i>=0&&!e.repeat&&pads[i])trigger(pads[i].id);
 });
 
+/* ---------- フォルダ連携（File System Access API） ---------- */
+const hasFS='showDirectoryPicker' in window;
+let dirHandle=null;
+
+function fsNameFor(p){
+  const safe=(p.file||'audio').normalize('NFC').replace(/[\/\\:*?"<>|]/g,'_').slice(0,80);
+  return 'pad_'+p.id+'_'+safe;
+}
+async function writeFile(dir,name,blob){
+  const fh=await dir.getFileHandle(name,{create:true});
+  const w=await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+async function pickDir(){
+  const h=await window.showDirectoryPicker({id:'ponde-pad',mode:'readwrite'});
+  dirHandle=h;
+  try{await putMeta('dir',h)}catch(e){}
+  return h;
+}
+async function ensureDir(){
+  if(!hasFS)throw new Error('unsupported');
+  if(!dirHandle){
+    try{const h=await getMeta('dir');if(h)dirHandle=h}catch(e){}
+  }
+  if(!dirHandle)return pickDir();
+  let perm;
+  try{perm=await dirHandle.queryPermission({mode:'readwrite'})}catch(e){return pickDir()}
+  if(perm!=='granted'){
+    try{perm=await dirHandle.requestPermission({mode:'readwrite'})}catch(e){perm='denied'}
+    if(perm!=='granted')return pickDir();
+  }
+  return dirHandle;
+}
+async function saveToFolder(){
+  if(!hasFS){toast('このブラウザはフォルダ保存に対応していません（⬇書き出しをご利用ください）');return}
+  let dir;
+  try{dir=await ensureDir()}catch(e){toast('フォルダへのアクセスが許可されませんでした');return}
+  try{
+    let n=0;
+    for(const p of pads){
+      if(p.file){
+        const blob=await getBlob(p.id);
+        if(blob){p.fsFile=fsNameFor(p);await writeFile(dir,p.fsFile,blob);n++}
+        else p.fsFile='';
+      }else{
+        p.fsFile='';
+      }
+    }
+    const meta={version:1,savedAt:Date.now(),pads:pads.map(padMeta)};
+    await writeFile(dir,'data.json',new Blob([JSON.stringify(meta,null,0)],{type:'application/json'}));
+    save();
+    toast('フォルダに保存しました（音声'+n+'件）');
+  }catch(e){toast('保存中にエラーが発生しました')}
+}
+async function loadFromFolder(){
+  if(!hasFS){toast('このブラウザはフォルダ読込に対応していません（⬆読み込みをご利用ください）');return}
+  let dir;
+  try{dir=await ensureDir()}catch(e){toast('フォルダへのアクセスが許可されませんでした');return}
+  let meta;
+  try{
+    const fh=await dir.getFileHandle('data.json',{create:false});
+    const f=await fh.getFile();
+    meta=JSON.parse(await f.text());
+  }catch(e){toast('このフォルダに data.json が見つかりません');return}
+  if(!Array.isArray(meta.pads)){toast('不正なデータです');return}
+  stopAll();
+  const missing=[];
+  let ok=0;
+  for(const mp of meta.pads){
+    if(mp.file&&mp.fsFile){
+      try{
+        const fh=await dir.getFileHandle(mp.fsFile,{create:false});
+        const f=await fh.getFile();
+        await putBlob(mp.id,f);
+        revoke(mp.id);
+        ok++;
+      }catch(e){
+        missing.push(mp.name||mp.file);
+        mp.file='';mp.kind='';mp.fsFile='';
+      }
+    }
+  }
+  pads=meta.pads.map((p,i)=>({...defPad(p.id,i),...p}));
+  nextId=Math.max(-1,...pads.map(p=>p.id))+1;
+  buildGrid();select(pads[0].id);save();
+  toast(missing.length
+    ? ('読込完了（'+ok+'件）。フォルダに見つからなかったファイル: '+missing.join('、'))
+    : ('フォルダから読み込みました（'+ok+'件）'));
+}
+$('fsSave').onclick=saveToFolder;
+$('fsLoad').onclick=loadFromFolder;
+if(!hasFS){$('fsSave').disabled=true;$('fsLoad').disabled=true;$('fsSave').title='非対応ブラウザです（Chrome/Edge推奨）';$('fsLoad').title=$('fsSave').title}
+
+/* ---------- ZIP書き出し／読み込み（音声ファイルを実ファイルのまま持ち出す） ---------- */
+function guessMime(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  const map={mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',oga:'audio/ogg',m4a:'audio/mp4',aac:'audio/aac',flac:'audio/flac',opus:'audio/opus',webm:'audio/webm',mp4:'video/mp4',mov:'video/quicktime',m4v:'video/mp4',mkv:'video/x-matroska',avi:'video/x-msvideo'};
+  return map[ext]||'application/octet-stream';
+}
+async function exportZip(){
+  if(typeof JSZip==='undefined'){toast('ZIP機能の読み込みに失敗しました（オフラインの場合は読み込めません）');return}
+  toast('ZIP作成中…');
+  try{
+    const zip=new JSZip();
+    const audioDir=zip.folder('audio');
+    const used=new Set();
+    let n=0;
+    const padsOut=pads.map(p=>padMeta(p));
+    for(let i=0;i<pads.length;i++){
+      const p=pads[i];
+      padsOut[i].fsFile='';
+      padsOut[i].zipFile='';
+      if(p.file){
+        const blob=await getBlob(p.id);
+        if(blob){
+          const base=p.file.replace(/[\/\\]/g,'_')||('pad_'+p.id);
+          let name=base,k=1;
+          while(used.has(name)){const dot=base.lastIndexOf('.');name=dot>0?(base.slice(0,dot)+'_'+(k++)+base.slice(dot)):(base+'_'+(k++))}
+          used.add(name);
+          audioDir.file(name,blob);
+          padsOut[i].zipFile='audio/'+name;
+          n++;
+        }
+      }
+    }
+    zip.file('data.json',JSON.stringify({version:1,exportedAt:Date.now(),pads:padsOut}));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='ponde-pad-'+new Date().toISOString().slice(0,10)+'.zip';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    toast('ZIPを書き出しました（音声'+n+'件）');
+  }catch(e){toast('ZIP作成に失敗しました')}
+}
+async function importZipFile(file){
+  if(typeof JSZip==='undefined'){toast('ZIP機能の読み込みに失敗しました（オフラインの場合は読み込めません）');return}
+  toast('ZIP読み込み中…');
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const dj=zip.file('data.json');
+    if(!dj){toast('ZIP内にdata.jsonが見つかりません');return}
+    const meta=JSON.parse(await dj.async('string'));
+    if(!Array.isArray(meta.pads)){toast('不正なファイルです');return}
+    stopAll();
+    const missing=[];
+    let n=0;
+    for(const mp of meta.pads){
+      if(mp.file&&mp.zipFile){
+        const zf=zip.file(mp.zipFile);
+        if(zf){
+          const raw=await zf.async('blob');
+          await putBlob(mp.id,new File([raw],mp.file,{type:raw.type||guessMime(mp.file)}));
+          revoke(mp.id);
+          n++;
+        }else{missing.push(mp.name||mp.file);mp.file='';mp.kind=''}
+      }
+    }
+    pads=meta.pads.map((p,i)=>({...defPad(p.id,i),...p,fsFile:''}));
+    nextId=Math.max(-1,...pads.map(p=>p.id))+1;
+    buildGrid();select(pads[0].id);save();
+    toast(missing.length
+      ? ('読込完了（'+n+'件）。ZIP内に見つからなかった: '+missing.join('、'))
+      : ('ZIPから読み込みました（音声'+n+'件）'));
+  }catch(e){toast('ZIP読み込みに失敗しました（ファイルが壊れているか形式が違います）')}
+}
+$('expZip').onclick=exportZip;
+$('impZip').onclick=()=>$('impFile').click();
+$('impFile').onchange=()=>{const f=$('impFile').files[0];if(f)importZipFile(f);$('impFile').value=''};
+
 pads=load();
 nextId=Math.max(-1,...pads.map(p=>p.id))+1;
 cur=pads[0].id;
@@ -490,6 +681,7 @@ save();
   try{
     db=await openDB();
     for(const p of pads){if(p.file){try{await urlOf(p.id)}catch(e){}}}
+    try{const h=await getMeta('dir');if(h)dirHandle=h}catch(e){}
   }catch(e){toast('音声データの保存機能が使えません')}
 })();
 
