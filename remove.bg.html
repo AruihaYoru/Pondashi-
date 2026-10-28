@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>勾配マスク 高精度版</title>
+<style>
+:root{--bg:#f4f4f4;--panel:#fff;--fg:#222;--sub:#666;--line:#ddd;--acc:#0b6bcb}
+@media(prefers-color-scheme:dark){:root{--bg:#1b1b1d;--panel:#26262a;--fg:#e8e8e8;--sub:#9a9aa0;--line:#3a3a40;--acc:#5aa2ff}}
+body{font-family:sans-serif;margin:14px;background:var(--bg);color:var(--fg)}
+.wrap{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start;margin-top:10px}
+.panel{background:var(--panel);border-radius:8px;padding:12px;border:1px solid var(--line)}
+.ctl{width:330px;max-height:88vh;overflow:auto}
+.grp{margin:14px 0 2px;font-weight:bold;font-size:13px;border-bottom:1px solid var(--line)}
+label{display:block;margin-top:8px;font-size:12px}
+.row{display:flex;gap:6px;align-items:center}
+.row input[type=range]{flex:1;min-width:0}
+.row input[type=number]{width:70px}
+.tip{color:var(--sub);font-size:11px}
+select,button{margin-top:6px}
+#info{font-size:12px;color:var(--sub);margin-top:8px;line-height:1.5}
+.checker{background-image:linear-gradient(45deg,#bbb 25%,transparent 25%),linear-gradient(-45deg,#bbb 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#bbb 75%),linear-gradient(-45deg,transparent 75%,#bbb 75%);background-size:16px 16px;background-position:0 0,0 8px,8px -8px,-8px 0;background-color:#ddd}
+canvas{max-width:100%;height:auto;display:block}
+</style>
+</head>
+<body>
+<b>勾配マスク 高精度版</b>　<input type="file" id="file" accept="image/*">
+<div class="wrap">
+ <div class="panel ctl">
+  <label>表示
+   <select id="view"><option value="cut">切り抜き</option><option value="tri">トライマップ</option><option value="mask">マスク</option><option value="edge">抽出した輪郭</option><option value="mag">勾配の強さ</option></select></label>
+  <label>処理解像度（幅）
+   <select id="res"><option value="800">800px</option><option value="1200">1200px</option><option value="1600">1600px</option><option value="0">元サイズ（重い）</option></select></label>
+  <div id="params"></div>
+  <p><button id="dl">切り抜きをPNGで保存</button></p>
+  <div id="info"></div>
+ </div>
+ <div class="panel checker"><canvas id="out"></canvas></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const out=$('out'),octx=out.getContext('2d');
+let srcImg=null,imgData=null,result=null;
+// 数値欄は範囲外も自由入力可（スライダーは目安の範囲）
+const PARAMS=[
+ {g:'輪郭の検出',id:'sigma',label:'ぼかし sigma（0以下はなし）',min:0,max:15,step:0.5,value:0},
+ {id:'wl',label:'L（明度）の重み　負＝明度だけの輪郭を打ち消す',min:-2,max:10,step:0.05,value:0.25},
+ {id:'wa',label:'a（緑〜赤）の重み',min:-2,max:10,step:0.05,value:0},
+ {id:'wb',label:'b（青〜黄）の重み',min:-2,max:10,step:0.05,value:0},
+ {id:'mode',type:'select',label:'しきい値の決め方',opts:[['fixed','固定しきい値'],['top','勾配の強い上位 ％']],value:'fixed'},
+ {id:'thresh',label:'固定しきい値',min:0,max:300,step:1,value:60},
+ {id:'top',label:'上位 ％',min:0.1,max:60,step:0.1,value:5},
+ {g:'領域',id:'close',label:'輪郭の隙間埋め close（半径）',min:0,max:20,step:1,value:0},
+ {id:'minarea',label:'最小面積',min:0,max:20000,step:50,value:0},
+ {id:'keepMax',type:'check',label:'最大の領域だけ残す',value:false},
+ {g:'境界の精密化（青空の縁取り対策）',id:'band',label:'境界帯の幅 px（0で無効）',min:0,max:15,step:1,value:3},
+ {id:'win',label:'前景/背景の色を推定する窓 px',min:2,max:40,step:1,value:8},
+ {id:'minsep',label:'前景と背景の最小色差（近いと判定しない）',min:0,max:100,step:1,value:25},
+ {id:'contrast',label:'境界の硬さ（大きいほどくっきり）',min:0.1,max:20,step:0.1,value:2},
+ {id:'bias',label:'境界オフセット（＋で内側へ削る、−で外へ広げる）',min:-1,max:1,step:0.01,value:0},
+ {id:'decon',type:'check',label:'縁の色の染みを除去',value:true},
+ {id:'feather',label:'仕上げのぼかし feather',min:0,max:8,step:0.5,value:0}
+];
+const P={};
+let pending=false;
+function schedule(){if(!pending){pending=true;requestAnimationFrame(()=>{pending=false;compute();});}}
+function buildUI(){
+ const box=$('params');
+ PARAMS.forEach(p=>{
+  P[p.id]=p.value;
+  if(p.g){const d=document.createElement('div');d.className='grp';d.textContent=p.g;box.appendChild(d);}
+  const lab=document.createElement('label');
+  if(p.type==='select'){
+   lab.append(p.label+' ');const s=document.createElement('select');
+   p.opts.forEach(o=>s.add(new Option(o[1],o[0])));s.value=p.value;
+   s.oninput=()=>{P[p.id]=s.value;schedule();};lab.append(s);
+  }else if(p.type==='check'){
+   const c=document.createElement('input');c.type='checkbox';c.checked=p.value;
+   c.oninput=()=>{P[p.id]=c.checked;schedule();};lab.append(c,' '+p.label);
+  }else{
+   lab.append(p.label);
+   const row=document.createElement('div');row.className='row';
+   const r=document.createElement('input');r.type='range';r.min=p.min;r.max=p.max;r.step=p.step;r.value=p.value;
+   const n=document.createElement('input');n.type='number';n.step=p.step;n.value=p.value;
+   r.oninput=()=>{n.value=r.value;P[p.id]=+r.value;schedule();};
+   n.oninput=()=>{const v=parseFloat(n.value);if(isNaN(v))return;r.value=v;P[p.id]=v;schedule();};
+   row.append(r,n);lab.append(row);
+  }
+  box.appendChild(lab);
+ });
+}
+
+// ---- Lab ----
+const lin=c=>{c/=255;return c<=0.04045?c/12.92:Math.pow((c+0.055)/1.055,2.4);};
+const lf=t=>t>0.008856?Math.cbrt(t):7.787*t+16/116;
+function toLab(d,n){
+ const L=new Float32Array(n),A=new Float32Array(n),B=new Float32Array(n);
+ for(let i=0;i<n;i++){
+  const r=lin(d[i*4]),g=lin(d[i*4+1]),b=lin(d[i*4+2]);
+  const fx=lf((0.4124*r+0.3576*g+0.1805*b)/0.95047),fy=lf(0.2126*r+0.7152*g+0.0722*b),fz=lf((0.0193*r+0.1192*g+0.9505*b)/1.08883);
+  L[i]=(116*fy-16)*2.55;A[i]=500*(fx-fy);B[i]=200*(fy-fz);
+ }
+ return [L,A,B];
+}
+function gauss(src,w,h,s){
+ if(s<=0)return src;
+ const r=Math.ceil(s*3),k=new Float32Array(2*r+1);let t=0;
+ for(let i=-r;i<=r;i++){k[i+r]=Math.exp(-i*i/(2*s*s));t+=k[i+r];}
+ for(let i=0;i<k.length;i++)k[i]/=t;
+ const tmp=new Float32Array(w*h),dst=new Float32Array(w*h);
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++)a+=src[y*w+Math.min(w-1,Math.max(0,x+i))]*k[i+r];tmp[y*w+x]=a;}
+ for(let y=0;y<h;y++)for(let x=0;x<w;x++){let a=0;for(let i=-r;i<=r;i++)a+=tmp[Math.min(h-1,Math.max(0,y+i))*w+x]*k[i+r];dst[y*w+x]=a;}
+ return dst;
+}
+function boxBlur(src,w,h,r){
+ const tmp=new Float32Array(w*h),dst=new Float32Array(w*h);
+ for(let y=0;y<h;y++){let s=0;const o=y*w;
+  for(let x=0;x<=Math.min(r,w-1);x++)s+=src[o+x];
+  for(let x=0;x<w;x++){tmp[o+x]=s;if(x+r+1<w)s+=src[o+x+r+1];if(x-r>=0)s-=src[o+x-r];}}
+ for(let x=0;x<w;x++){let s=0;
+  for(let y=0;y<=Math.min(r,h-1);y++)s+=tmp[y*w+x];
+  for(let y=0;y<h;y++){dst[y*w+x]=s;if(y+r+1<h)s+=tmp[(y+r+1)*w+x];if(y-r>=0)s-=tmp[(y-r)*w+x];}}
+ return dst;
+}
+function sobelAcc(c,w,h,wt,acc){
+ if(wt===0)return;
+ for(let y=1;y<h-1;y++)for(let x=1;x<w-1;x++){
+  const i=y*w+x,gx=(c[i-w+1]+2*c[i+1]+c[i+w+1])-(c[i-w-1]+2*c[i-1]+c[i+w-1]);
+  const gy=(c[i+w-1]+2*c[i+w]+c[i+w+1])-(c[i-w-1]+2*c[i-w]+c[i-w+1]);
+  acc[i]+=wt*(gx*gx+gy*gy);
+ }
+}
+function morph(src,w,h,r,isMax){
+ if(r<=0)return src;
+ const pass=(a,hz)=>{const o=new Uint8Array(w*h);
+  for(let y=0;y<h;y++)for(let x=0;x<w;x++){let v=isMax?0:1;
+   for(let i=-r;i<=r;i++){const xx=hz?x+i:x,yy=hz?y:y+i;
+    if(xx<0||yy<0||xx>=w||yy>=h)continue;
+    const s=a[yy*w+xx];if(isMax){if(s){v=1;break;}}else if(!s){v=0;break;}}
+   o[y*w+x]=v;}
+  return o;};
+ return pass(pass(src,true),false);
+}
+function fillInside(edge,w,h,minArea,keepMax){
+ const n=w*h,bg=new Uint8Array(n),q=new Int32Array(n);let qh=0,qt=0;
+ const push=i=>{if(!bg[i]&&!edge[i]){bg[i]=1;q[qt++]=i;}};
+ for(let x=0;x<w;x++){push(x);push((h-1)*w+x);}
+ for(let y=0;y<h;y++){push(y*w);push(y*w+w-1);}
+ while(qh<qt){const i=q[qh++],x=i%w,y=(i/w)|0;
+  if(x>0)push(i-1);if(x<w-1)push(i+1);if(y>0)push(i-w);if(y<h-1)push(i+w);}
+ const fg=new Uint8Array(n);for(let i=0;i<n;i++)fg[i]=bg[i]?0:1;
+ const lab=new Int32Array(n),sizes=[0];let id=0,maxId=0,maxS=0;
+ for(let s=0;s<n;s++){
+  if(!fg[s]||lab[s])continue;id++;qh=0;qt=0;lab[s]=id;q[qt++]=s;
+  while(qh<qt){const i=q[qh++],x=i%w,y=(i/w)|0;
+   const add=j=>{if(fg[j]&&!lab[j]){lab[j]=id;q[qt++]=j;}};
+   if(x>0)add(i-1);if(x<w-1)add(i+1);if(y>0)add(i-w);if(y<h-1)add(i+w);}
+  sizes.push(qt);if(qt>maxS){maxS=qt;maxId=id;}
+ }
+ const o=new Uint8Array(n);
+ for(let i=0;i<n;i++){const l=lab[i];if(l&&(keepMax?l===maxId:sizes[l]>=minArea))o[i]=1;}
+ return o;
+}
+
+// ---- 境界の精密化：トライマップ → 局所の前景色/背景色への射影でα推定 → 色の染み除去 ----
+function refine(rgba,mask,w,h,p){
+ const n=w*h,band=Math.max(0,Math.round(p.band));
+ const alpha=new Float32Array(n),col=new Uint8ClampedArray(rgba),tri=new Uint8Array(n);
+ const base=()=>{for(let i=0;i<n;i++){alpha[i]=mask[i]?255:0;tri[i]=mask[i]?2:0;}return {alpha,col,tri};};
+ if(band===0)return base();
+ const dil=morph(mask,w,h,band,true),ero=morph(mask,w,h,band,false);
+ const win=Math.max(Math.round(p.win),band+1);
+ const mk=()=>[0,1,2,3].map(()=>new Float32Array(n)); // 個数, R, G, B
+ const F=mk(),Bk=mk(),gF=[0,0,0],gB=[0,0,0];let cF=0,cB=0;
+ for(let i=0;i<n;i++){
+  const q=i*4;let T=null,G=null;
+  if(ero[i]){tri[i]=2;T=F;G=gF;cF++;}else if(!dil[i]){tri[i]=0;T=Bk;G=gB;cB++;}else tri[i]=1;
+  if(T){T[0][i]=1;for(let c=0;c<3;c++){T[c+1][i]=rgba[q+c];G[c]+=rgba[q+c];}}
+ }
+ if(!cF||!cB)return base();
+ for(let c=0;c<3;c++){gF[c]/=cF;gB[c]/=cB;}
+ const Fb=F.map(a=>boxBlur(a,w,h,win)),Bb=Bk.map(a=>boxBlur(a,w,h,win));
+ const ms2=Math.max(1,p.minsep*p.minsep),cl=v=>v<0?0:v>1?1:v;
+ const f=[0,0,0],b=[0,0,0];
+ for(let i=0;i<n;i++){
+  if(tri[i]===2){alpha[i]=255;continue;}
+  if(tri[i]===0){alpha[i]=0;continue;}
+  const q=i*4;
+  for(let c=0;c<3;c++){
+   f[c]=Fb[0][i]>=1?Fb[c+1][i]/Fb[0][i]:gF[c];
+   b[c]=Bb[0][i]>=1?Bb[c+1][i]/Bb[0][i]:gB[c];
+  }
+  const d0=f[0]-b[0],d1=f[1]-b[1],d2=f[2]-b[2],dd=d0*d0+d1*d1+d2*d2;
+  if(dd<ms2){alpha[i]=mask[i]?255:0;continue;}
+  const c0=rgba[q],c1=rgba[q+1],c2=rgba[q+2];
+  const a=cl(((c0-b[0])*d0+(c1-b[1])*d1+(c2-b[2])*d2)/dd);
+  alpha[i]=cl((a-0.5-p.bias)*p.contrast+0.5)*255;
+  if(p.decon){
+   const t=cl((a-0.2)/0.4),ad=Math.max(a,0.2),cc=[c0,c1,c2];
+   for(let c=0;c<3;c++){
+    const u=Math.min(255,Math.max(0,(cc[c]-(1-a)*b[c])/ad));
+    col[q+c]=f[c]+(u-f[c])*t;
+   }
+  }
+ }
+ return {alpha,col,tri};
+}
+
+function compute(){
+ if(!imgData)return;
+ const w=imgData.width,h=imgData.height,n=w*h,p=P;
+ const sg=Math.max(0,p.sigma);
+ const ch=toLab(imgData.data,n).map(c=>gauss(c,w,h,sg));
+ const acc=new Float32Array(n);
+ sobelAcc(ch[0],w,h,p.wl,acc);sobelAcc(ch[1],w,h,p.wa,acc);sobelAcc(ch[2],w,h,p.wb,acc);
+ const mag=new Float32Array(n);
+ for(let i=0;i<n;i++)mag[i]=Math.sqrt(Math.max(0,acc[i]));
+ let thr=p.thresh;
+ if(p.mode==='top'){
+  const s=Float32Array.from(mag).sort();
+  thr=Math.max(1e-3,s[Math.min(n-1,Math.max(0,Math.floor(n*(1-p.top/100))))]);
+ }
+ let edge=new Uint8Array(n),ec=0;
+ for(let i=0;i<n;i++)if(mag[i]>=thr){edge[i]=1;ec++;}
+ const r=Math.max(0,Math.round(p.close));
+ edge=morph(morph(edge,w,h,r,true),w,h,r,false);
+ const mask=fillInside(edge,w,h,p.minarea,p.keepMax);
+ const ref=refine(imgData.data,mask,w,h,p);
+ const alpha=p.feather>0?gauss(ref.alpha,w,h,p.feather):ref.alpha;
+ let fc=0,uc=0;
+ for(let i=0;i<n;i++){if(mask[i])fc++;if(ref.tri[i]===1)uc++;}
+ result={w,h,mag,edge,mask,alpha,col:ref.col,tri:ref.tri};
+ $('info').textContent=`しきい値 ${thr.toFixed(1)} / 輪郭 ${(100*ec/n).toFixed(1)}% / 被写体 ${(100*fc/n).toFixed(1)}% / 境界帯 ${(100*uc/n).toFixed(1)}%`;
+ render();
+}
+function buildImage(view){
+ const {w,h,mag,edge,mask,alpha,col,tri}=result,n=w*h,img=new ImageData(w,h),d=img.data;
+ for(let i=0;i<n;i++){
+  const q=i*4;
+  if(view==='cut'){d[q]=col[q];d[q+1]=col[q+1];d[q+2]=col[q+2];d[q+3]=alpha[i];continue;}
+  const v=view==='mag'?Math.min(255,mag[i]):view==='edge'?edge[i]*255:view==='mask'?mask[i]*255:tri[i]*127.5;
+  d[q]=d[q+1]=d[q+2]=v;d[q+3]=255;
+ }
+ return img;
+}
+function render(){
+ if(!result)return;
+ out.width=result.w;out.height=result.h;
+ octx.putImageData(buildImage($('view').value),0,0);
+}
+function rebuild(){
+ if(!srcImg)return;
+ const mw=+$('res').value,s=mw>0?Math.min(1,mw/srcImg.naturalWidth):1;
+ const c=document.createElement('canvas');
+ c.width=Math.round(srcImg.naturalWidth*s);c.height=Math.round(srcImg.naturalHeight*s);
+ const cx=c.getContext('2d',{willReadFrequently:true});
+ cx.drawImage(srcImg,0,0,c.width,c.height);
+ imgData=cx.getImageData(0,0,c.width,c.height);
+ compute();
+}
+$('file').onchange=e=>{
+ const f=e.target.files[0];if(!f)return;
+ const fr=new FileReader();
+ fr.onload=()=>{const im=new Image();im.onload=()=>{srcImg=im;rebuild();};im.src=fr.result;};
+ fr.readAsDataURL(f);
+};
+$('res').onchange=rebuild;
+$('view').onchange=render;
+$('dl').onclick=()=>{
+ if(!result)return;
+ const c=document.createElement('canvas');c.width=result.w;c.height=result.h;
+ c.getContext('2d').putImageData(buildImage('cut'),0,0);
+ c.toBlob(b=>{const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='cutout.png';a.click();});
+};
+buildUI();
+</script>
+</body>
+</html>
