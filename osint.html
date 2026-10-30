@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="only light">
+<title>Google検索クエリ組み立て</title>
+<style>
+:root, :root[data-theme] { color-scheme: only light !important; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+html, body { background: #fff !important; color: #000 !important; }
+input, select, textarea, button { background: #fff !important; color: #000 !important; }
+a { color: #00e !important; }
+body { max-width: 940px; margin: 0; padding: 6px 10px; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 1px 4px 1px 0; vertical-align: top; }
+td.l { white-space: nowrap; width: 1%; }
+input[type=text], textarea, select { width: 100%; box-sizing: border-box; }
+textarea { font-family: monospace; }
+.g { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; align-items: center; }
+.g select { width: auto; }
+.g input[type=text] { flex: 1 1 200px; min-width: 0; }
+.g span { white-space: nowrap; }
+.cb { display: block; }
+details { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<h1>Google検索クエリ組み立て</h1>
+<p>
+  ぶっちゃけ一番面白かったのはどっかの時点で動物系OSINT調査になっちまったことや
+  <br>文句はClaude Haikuに言ってくれ
+</p>
+
+<div id="groups"></div>
+<p><button type="button" id="gadd">+ 行を追加</button> <button type="button" id="gaddx">+ 除外の行を追加</button></p>
+
+<p>期間: <input type="date" id="after"> 〜 <input type="date" id="before"> (空欄なら指定なし)</p>
+
+<h2>できあがり</h2>
+<textarea id="out" rows="2" readonly></textarea>
+<p>
+<button type="button" id="open">Googleで検索</button>
+<button type="button" id="copy">クエリをコピー</button>
+<button type="button" id="copyurl">URLをコピー</button>
+<button type="button" id="save">履歴に保存</button>
+<button type="button" id="clear">全部クリア</button>
+<span id="msg"></span>
+</p>
+<p>意味:</p>
+<ul id="explain"></ul>
+
+<details>
+<summary>検索の詳細設定</summary>
+<table id="pt"></table>
+<div id="cbs"></div>
+</details>
+
+<details>
+<summary>URL</summary>
+<textarea id="urlout" rows="3" readonly></textarea>
+</details>
+
+<details>
+<summary>複数ターゲットを一括で検索リンク化</summary>
+<p>上のクエリ内の <code>{}</code> を、下の1行ごとに置き換えたリンクを作ります。<code>{}</code> が無ければ末尾に "行の内容" を追加します。</p>
+<textarea id="targets" rows="4" placeholder="1行に1つずつ入力&#10;例:&#10;ポチ&#10;タマ&#10;シロ"></textarea>
+<ol id="bulk"></ol>
+<button type="button" id="bcopy">一括クエリをコピー</button>
+</details>
+
+<details>
+<summary id="hsum">履歴 (0)</summary>
+<ul id="hist"></ul>
+<button type="button" id="hexp">履歴のクエリをテキスト化</button>
+<textarea id="hbox" rows="3" style="display:none"></textarea>
+</details>
+
+<script>
+(function () {
+  var root = document.documentElement;
+  var force = function () { if (root.getAttribute("data-theme") !== "light") root.setAttribute("data-theme", "light"); };
+  force();
+  new MutationObserver(force).observe(root, { attributes: true, attributeFilter: ["data-theme"] });
+
+  var $ = function (id) { return document.getElementById(id); };
+
+  var TYPES = [
+    ["kw", "キーワード", "柴犬 トイプードル -野良"],
+    ["phrase", "フレーズ(完全一致)", '"ホッキョクグマ" "ニホンカモシカ"'],
+    ["site", "サイト site:", "tokyo-zoo.net wwf.or.jp -pinterest.com"],
+    ["filetype", "ファイル形式 filetype:", "pdf xlsx (どうぶつ図鑑・生息数の表)"],
+    ["ext", "拡張子 ext:", "pdf (動物の写真集)"],
+    ["intitle", "タイトルに含む intitle:", "動物園 水族館 保護猫"],
+    ["inurl", "URLに含む inurl:", "zoo animal cat"],
+    ["intext", "本文に含む intext:", "ライオン 生息地 サバンナ"],
+    ["inanchor", "リンク文字に含む inanchor:", "動物病院 ペットホテル"],
+    ["allintitle", "タイトルに全て含む allintitle:", "猫 里親 募集"],
+    ["allinurl", "URLに全て含む allinurl:", "dog adoption"],
+    ["allintext", "本文に全て含む allintext:", "コアラ ユーカリ 食べる"],
+    ["raw", "そのまま書く", "犬 AROUND(5) 散歩 / ネコ * 手 / related:wwf.or.jp"]
+  ];
+  var P = [
+    ["tbm", "検索の種類 (tbm)", "s", [["", "ウェブ"], ["isch", "画像"], ["nws", "ニュース"], ["vid", "動画"], ["bks", "書籍"], ["shop", "ショッピング"], ["lcl", "ローカル"]]],
+    ["udm", "表示モード (udm)", "s", [["", "指定なし"], ["14", "14: ウェブのみ"], ["2", "2: 画像"], ["7", "7: 動画"], ["12", "12: ニュース"], ["36", "36: 書籍"]]],
+    ["qdr", "直近の期間 (tbs)", "s", [["", "指定なし"], ["qdr:h", "1時間以内"], ["qdr:d", "24時間以内"], ["qdr:w", "1週間以内"], ["qdr:m", "1か月以内"], ["qdr:y", "1年以内"]]],
+    ["safe", "セーフサーチ (safe)", "s", [["", "指定なし"], ["off", "off"], ["active", "active"]]],
+    ["num", "1ページの件数 (num)", "t", "10〜100 (ペンギンの行進の長さ)"],
+    ["start", "開始位置 (start)", "t", "0, 10, 20 ... (カメの歩み)"],
+    ["hl", "画面の言語 (hl)", "t", "ja (ねこ語は未対応)"],
+    ["gl", "国 (gl)", "t", "jp (ニホンザルの国)"],
+    ["lr", "結果の言語 (lr)", "t", "lang_ja (ワンと鳴く言語)"],
+    ["cr", "国で絞る (cr)", "t", "countryJP (トキの故郷)"],
+    ["uule", "位置情報 (uule)", "t", "(ウサギの巣穴の位置情報)"],
+    ["qdr2", "直近の期間 自由入力 (qdr)", "t", "d3 / w2 / m6 / n30 (ナマケモノの30分)"],
+    ["as_occt", "語の出現位置 (as_occt)", "s", [["", "指定なし"], ["any", "どこでも"], ["title", "タイトル"], ["body", "本文"], ["url", "URL"], ["links", "リンク"]]],
+    ["isz", "画像サイズ (isz)", "s", [["", "指定なし"], ["isz:l", "大"], ["isz:m", "中"], ["isz:i", "アイコン"]]],
+    ["ic", "画像の色 (ic)", "s", [["", "指定なし"], ["ic:color", "フルカラー"], ["ic:gray", "白黒"], ["ic:trans", "透過"], ["ic:specific,isc:red", "赤"], ["ic:specific,isc:blue", "青"], ["ic:specific,isc:green", "緑"], ["ic:specific,isc:black", "黒"], ["ic:specific,isc:white", "白"]]],
+    ["itp", "画像の種類 (itp)", "s", [["", "指定なし"], ["itp:photo", "写真"], ["itp:face", "顔"], ["itp:clipart", "クリップアート"], ["itp:lineart", "線画"], ["itp:animated", "アニメーション"]]],
+    ["sur", "画像ライセンス (sur)", "s", [["", "指定なし"], ["sur:fmc", "商用利用・改変可"], ["sur:fc", "商用利用可"], ["sur:fm", "改変可"], ["sur:f", "再利用可"]]],
+    ["dur", "動画の長さ (dur)", "s", [["", "指定なし"], ["dur:s", "短い(4分未満)"], ["dur:m", "中(4〜20分)"], ["dur:l", "長い(20分超)"]]],
+    ["vq", "動画の条件 (tbs)", "s", [["", "指定なし"], ["hq:h", "高画質"], ["cc:1", "字幕あり"]]],
+    ["dom", "検索ドメイン", "t", "www.google.co.jp (キリンの首ほど長いドメイン)"],
+    ["ie", "入力の文字コード (ie)", "t", "utf-8 (ウーパールーパー)"],
+    ["oe", "出力の文字コード (oe)", "t", "utf-8 (ハリネズミ)"],
+    ["tbsraw", "tbs 追加 (自由)", "t", "li:1,sbd:1 (イルカのジャンプ)"],
+    ["extra", "追加パラメータ", "t", "key=value&key=value (ゾウは忘れない)"]
+  ];
+  var C = [
+    ["cdr", "上の期間を「期間指定」としても使う (cdr)"],
+    ["sbd", "新しい順に並べる (sbd)"],
+    ["li", "完全一致モード (verbatim)"],
+    ["filter0", "似た結果も省略せず表示 (filter=0)"],
+    ["nfpr", "スペル自動補正をしない (nfpr=1)"],
+    ["pws", "パーソナライズ無効 (pws=0)"],
+    ["btnI", "最初の結果へ直行 (btnI=1)"],
+    ["gws", "リダイレクトなし (gws_rd=cr)"],
+    ["complete0", "予測変換オフ (complete=0)"]
+  ];
+
+  P.forEach(function (f) {
+    var tr = document.createElement("tr"), a = document.createElement("td"), b = document.createElement("td"), el;
+    a.className = "l"; a.textContent = f[1];
+    if (f[2] === "s") {
+      el = document.createElement("select");
+      f[3].forEach(function (o) { var op = document.createElement("option"); op.value = o[0]; op.textContent = o[1]; el.appendChild(op); });
+    } else { el = document.createElement("input"); el.type = "text"; el.placeholder = f[3] || ""; el.autocomplete = "off"; }
+    el.id = f[0];
+    b.appendChild(el); tr.appendChild(a); tr.appendChild(b); $("pt").appendChild(tr);
+  });
+  C.forEach(function (c) {
+    var l = document.createElement("label"); l.className = "cb";
+    var i = document.createElement("input"); i.type = "checkbox"; i.id = c[0];
+    l.appendChild(i); l.appendChild(document.createTextNode(" " + c[1]));
+    $("cbs").appendChild(l);
+  });
+
+  var tf = ["after", "before"].concat(P.map(function (f) { return f[0]; })).concat(["targets"]);
+  var cf = C.map(function (c) { return c[0]; });
+  var hist = [];
+
+  var newGroups = function () {
+    return [{ c: "AND", k: "kw", op: "OR", t: "" }];
+  };
+  var groups = newGroups();
+
+  function tokens(s) { return (s.match(/-?"[^"]*"|\S+/g) || []); }
+  function v(id) { return $(id).value.trim(); }
+  function typeInfo(k) { return TYPES.filter(function (t) { return t[0] === k; })[0] || TYPES[0]; }
+
+  function mkSel(opts, val, title, fn) {
+    var s = document.createElement("select"); s.title = title;
+    opts.forEach(function (o) { var e = document.createElement("option"); e.value = o[0]; e.textContent = o[1]; if (o[0] === val) e.selected = true; s.appendChild(e); });
+    s.addEventListener("change", function () { fn(s.value); });
+    return s;
+  }
+  function mkBtn(label, title, fn) {
+    var b = document.createElement("button"); b.type = "button"; b.textContent = label; b.title = title || "";
+    b.addEventListener("click", fn); return b;
+  }
+  function moveGroup(i, d) {
+    var j = i + d; if (j < 0 || j >= groups.length) return;
+    var x = groups[j]; groups[j] = groups[i]; groups[i] = x; renderGroups(); update();
+  }
+
+  function renderGroups() {
+    var box = $("groups"); box.innerHTML = "";
+    groups.forEach(function (g, i) {
+      var k = g.k || "kw", d = document.createElement("div"); d.className = "g";
+      var ex = isEx(g);
+      var cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = ex;
+      cb.addEventListener("change", function () { g.x = cb.checked; if (g.c === "NOT") g.c = "AND"; renderGroups(); update(); });
+      var cl = document.createElement("label"); cl.title = "チェックすると、この行の語を含まないページに絞る (-語)";
+      cl.appendChild(cb); cl.appendChild(document.createTextNode("除外"));
+      var hasPrev = groups.slice(0, i).some(function (h) { return !isEx(h); });
+      if (ex) { var sp = document.createElement("span"); sp.textContent = "含まない"; d.appendChild(sp); }
+      else if (hasPrev) d.appendChild(mkSel([["AND", "かつ"], ["OR", "または"]], g.c === "OR" ? "OR" : "AND", "前の行との関係", function (x) { g.c = x; update(); }));
+      else { var sp2 = document.createElement("span"); sp2.textContent = "最初"; d.appendChild(sp2); }
+      d.appendChild(mkSel(TYPES.map(function (t) { return [t[0], t[1]]; }), k, "この行の種類", function (x) { g.k = x; renderGroups(); update(); }));
+      var usesOp = ["raw", "ex", "wild", "around"].indexOf(k) < 0 && k.indexOf("allin") !== 0 && !ex;
+      if (usesOp) d.appendChild(mkSel([["OR", "どれか(OR)"], ["AND", "すべて(AND)"]], g.op, "この行の語のつなぎ方", function (x) { g.op = x; update(); }));
+      var t = document.createElement("input"); t.type = "text"; t.value = g.t; t.autocomplete = "off";
+      t.placeholder = typeInfo(k)[2];
+      t.addEventListener("input", function () { g.t = t.value; update(); });
+      d.appendChild(t);
+      d.appendChild(cl);
+      d.appendChild(mkBtn("↑", "上へ", function () { moveGroup(i, -1); }));
+      d.appendChild(mkBtn("↓", "下へ", function () { moveGroup(i, 1); }));
+      d.appendChild(mkBtn("×", "この行を削除", function () { if (groups.length > 1) groups.splice(i, 1); else groups[0].t = ""; renderGroups(); update(); }));
+      box.appendChild(d);
+    });
+  }
+
+  function isEx(g) { return !!g.x || g.c === "NOT"; }
+
+  function groupParts(g) {
+    var k = g.k || "kw", ex = isEx(g), pos = [], neg = [];
+    if (k === "raw") {
+      var r = g.t.trim();
+      if (r) { if (ex) neg.push("-(" + r + ")"); else pos.push(r); }
+      return { pos: pos, neg: neg };
+    }
+    if (k.indexOf("allin") === 0) {
+      var a = tokens(g.t);
+      if (a.length) { var q = k + ":" + a.join(" "); if (ex) neg.push("-(" + q + ")"); else pos.push(q); }
+      return { pos: pos, neg: neg };
+    }
+    var inc = [];
+    tokens(g.t).forEach(function (t) {
+      var minus = t.length > 1 && t.charAt(0) === "-";
+      if (minus) t = t.slice(1);
+      var m = k === "phrase" ? (/^".*"$/.test(t) ? t : '"' + t + '"') : k === "kw" ? t : k + ":" + t;
+      if (ex || minus) neg.push("-" + m); else inc.push(m);
+    });
+    if (inc.length === 1) pos.push(inc[0]);
+    else if (inc.length > 1) pos.push("(" + inc.join(g.op === "OR" ? " OR " : " ") + ")");
+    return { pos: pos, neg: neg };
+  }
+
+  function groupExpr() {
+    var cl = [], cur = null, neg = [];
+    groups.forEach(function (g) {
+      var p = groupParts(g);
+      neg = neg.concat(p.neg);
+      if (!p.pos.length) return;
+      if (!cur || g.c === "OR") { cur = []; cl.push(cur); }
+      cur.push.apply(cur, p.pos);
+    });
+    var out = "";
+    if (cl.length === 1) out = cl[0].join(" ");
+    else if (cl.length > 1) out = cl.map(function (c) { return c.length > 1 ? "(" + c.join(" ") + ")" : c[0]; }).join(" OR ");
+    return [out].concat(neg).filter(Boolean).join(" ");
+  }
+
+  function build() {
+    var p = [], ge = groupExpr();
+    if (ge) p.push(ge);
+    if (v("after")) p.push("after:" + v("after"));
+    if (v("before")) p.push("before:" + v("before"));
+    return p.join(" ");
+  }
+
+  function explain() {
+    var lines = [], started = false, negs = [];
+    groups.forEach(function (g) {
+      var k = g.k || "kw", ts = tokens(g.t), r = g.t.trim();
+      if (k === "raw" ? !r : !ts.length) return;
+      var label = "[" + typeInfo(k)[1] + "] ";
+      if (isEx(g)) { negs.push("除外: " + label + (k === "raw" ? r : ts.join(" ・ ")) + " (どれも含まない)"); return; }
+      var body;
+      if (k === "raw") body = r;
+      else if (k.indexOf("allin") === 0) body = ts.join(" ") + " (すべて含む)";
+      else {
+        var inc = ts.filter(function (t) { return !(t.length > 1 && t.charAt(0) === "-"); });
+        var exs = ts.filter(function (t) { return t.length > 1 && t.charAt(0) === "-"; }).map(function (t) { return t.slice(1); });
+        if (exs.length) negs.push("除外: " + label + exs.join(" ・ ") + " (どれも含まない)");
+        if (!inc.length) return;
+        body = inc.join(g.op === "OR" ? " または " : " かつ ");
+      }
+      var pre = !started ? "" : g.c === "OR" ? "または " : "かつ ";
+      started = true;
+      lines.push(pre + label + body);
+    });
+    if (v("after") || v("before")) lines.push((started ? "かつ " : "") + "[期間] " + (v("after") || "…") + " 〜 " + (v("before") || "…"));
+    return lines.concat(negs);
+  }
+
+  function mdy(s) { var a = s.split("-"); return parseInt(a[1], 10) + "/" + parseInt(a[2], 10) + "/" + a[0]; }
+
+  function buildUrl(q) {
+    var u = [];
+    var add = function (k, val) { if (val) u.push(k + "=" + encodeURIComponent(val)); };
+    add("q", q);
+    ["tbm", "udm", "num", "start", "hl", "gl", "lr", "cr", "uule", "safe", "ie", "oe", "as_occt"].forEach(function (k) { add(k, v(k)); });
+    var tbs = [];
+    if (v("qdr2")) tbs.push("qdr:" + v("qdr2")); else if (v("qdr")) tbs.push(v("qdr"));
+    ["isz", "ic", "itp", "sur", "dur", "vq"].forEach(function (k) { if (v(k)) tbs.push(v(k)); });
+    if ($("cdr").checked && (v("after") || v("before"))) {
+      var c = "cdr:1";
+      if (v("after")) c += ",cd_min:" + mdy(v("after"));
+      if (v("before")) c += ",cd_max:" + mdy(v("before"));
+      tbs.push(c);
+    }
+    if ($("sbd").checked) tbs.push("sbd:1");
+    if ($("li").checked) tbs.push("li:1");
+    if (v("tbsraw")) tbs.push(v("tbsraw").replace(/^[,\s]+|[,\s]+$/g, ""));
+    if (tbs.length) add("tbs", tbs.join(","));
+    if ($("filter0").checked) u.push("filter=0");
+    if ($("nfpr").checked) u.push("nfpr=1");
+    if ($("pws").checked) u.push("pws=0");
+    if ($("btnI").checked) u.push("btnI=1");
+    if ($("gws").checked) u.push("gws_rd=cr");
+    if ($("complete0").checked) u.push("complete=0");
+    var dm = v("dom").replace(/^https?:\/\//i, "").replace(/\/.*$/, "");
+    if (!/^[a-z0-9.-]*google\.[a-z.]+$/i.test(dm)) dm = "www.google.com";
+    var s = "https://" + dm + "/search?" + u.join("&");
+    var ex = v("extra").replace(/^[?&]/, "");
+    return ex ? s + "&" + ex : s;
+  }
+
+  var bulkQs = [];
+  function update() {
+    var q = build();
+    $("out").value = q;
+    $("urlout").value = buildUrl(q);
+    var ex = $("explain"); ex.innerHTML = "";
+    var lines = explain();
+    if (!lines.length) lines = ["(まだ何も入力されていません)"];
+    lines.forEach(function (l) { var li = document.createElement("li"); li.textContent = l; ex.appendChild(li); });
+    var ol = $("bulk"); ol.innerHTML = ""; bulkQs = [];
+    $("targets").value.split("\n").forEach(function (l) {
+      l = l.trim(); if (!l) return;
+      var bq = q.indexOf("{}") >= 0 ? q.split("{}").join(l) : (q + ' "' + l + '"').trim();
+      bulkQs.push(bq);
+      var li = document.createElement("li"), a = document.createElement("a");
+      a.href = buildUrl(bq); a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = bq;
+      li.appendChild(a); ol.appendChild(li);
+    });
+  }
+
+  function say(t) { $("msg").textContent = t; setTimeout(function () { $("msg").textContent = ""; }, 1800); }
+  function copy(s) {
+    if (!s) { say("空です"); return; }
+    var fb = function () { var t = document.createElement("textarea"); t.value = s; document.body.appendChild(t); t.select(); try { document.execCommand("copy"); } catch (e) {} document.body.removeChild(t); say("コピーしました"); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(s).then(function () { say("コピーしました"); }, fb); else fb();
+  }
+  function getState() { var s = {}; tf.forEach(function (id) { s[id] = $(id).value; }); cf.forEach(function (id) { s[id] = $(id).checked; }); s.groups = JSON.parse(JSON.stringify(groups)); return s; }
+  function setState(s) { tf.forEach(function (id) { $(id).value = s[id] || ""; }); cf.forEach(function (id) { $(id).checked = !!s[id]; }); groups = s.groups && s.groups.length ? JSON.parse(JSON.stringify(s.groups)) : newGroups(); renderGroups(); update(); }
+
+  function renderHist() {
+    var ul = $("hist"); ul.innerHTML = "";
+    $("hsum").textContent = "履歴 (" + hist.length + ")";
+    hist.forEach(function (h, i) {
+      var li = document.createElement("li");
+      li.appendChild(mkBtn("読込", "入力内容を元に戻す", function () { setState(h.s); }));
+      li.appendChild(mkBtn("削除", "", function () { hist.splice(i, 1); renderHist(); }));
+      var a = document.createElement("a"); a.href = h.url; a.target = "_blank"; a.rel = "noopener noreferrer"; a.textContent = " " + h.q;
+      li.appendChild(a); ul.appendChild(li);
+    });
+  }
+
+  tf.concat(cf).forEach(function (id) { $(id).addEventListener("input", update); $(id).addEventListener("change", update); });
+
+  function openIt() {
+    if (!build() && !v("extra")) { say("クエリが空です"); return; }
+    window.open($("urlout").value, "_blank", "noopener,noreferrer");
+  }
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Enter") return;
+    var t = e.target;
+    if (t.tagName === "TEXTAREA" && !(e.ctrlKey || e.metaKey)) return;
+    if (t.tagName === "BUTTON") return;
+    e.preventDefault(); openIt();
+  });
+
+  $("gadd").addEventListener("click", function () { groups.push({ c: "AND", k: "kw", op: "OR", t: "" }); renderGroups(); update(); });
+  $("gaddx").addEventListener("click", function () { groups.push({ c: "AND", k: "kw", op: "OR", t: "", x: true }); renderGroups(); update(); });
+  $("open").addEventListener("click", openIt);
+  $("copy").addEventListener("click", function () { copy($("out").value); });
+  $("copyurl").addEventListener("click", function () { copy($("urlout").value); });
+  $("bcopy").addEventListener("click", function () { copy(bulkQs.join("\n")); });
+  $("save").addEventListener("click", function () {
+    var q = $("out").value; if (!q) { say("空です"); return; }
+    hist.unshift({ q: q, url: $("urlout").value, s: getState() }); renderHist(); say("履歴に保存しました");
+  });
+  $("clear").addEventListener("click", function () { setState({}); });
+  $("hexp").addEventListener("click", function () {
+    var b = $("hbox"); b.style.display = "block";
+    b.value = hist.map(function (h) { return h.q; }).join("\n");
+  });
+
+  renderGroups();
+  update();
+})();
+</script>
+</body>
+</html>
