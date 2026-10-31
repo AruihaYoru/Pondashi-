@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ポン出しパッド</title>
+<style>
+:root{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f4f5f8;--panel:#ffffff;--line:#d8dce5;--text:#1b1e25;--sub:#6b7280;--acc:#2563eb}}
+:root[data-theme="dark"]{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;min-height:100vh;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px)}
+header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0 auto 0 0}
+label.ctl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--sub)}
+button,input[type=text],input[type=number]{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
+button{cursor:pointer}
+button:hover{border-color:var(--acc)}
+.danger{color:#e5484d}
+.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 16px;border-bottom:1px solid var(--line)}
+#now{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
+.tm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--sub)}
+.tm input{width:64px;padding:6px 8px}
+#tmD{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;min-width:4.5ch}
+.layout{display:grid;gap:16px;padding:16px;max-width:1040px;margin:0 auto;align-items:start}
+@media(min-width:760px){.layout{grid-template-columns:1fr 300px}}
+#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
+.pad{position:relative;aspect-ratio:1;border-radius:16px;background:var(--c,var(--panel));border:2px solid var(--line);color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 8px 34px;text-align:center;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;transition:transform .06s,box-shadow .12s;overflow:hidden}
+.pad.full{color:#fff;border-color:transparent}
+.pad.lt{color:#1b1e25}
+.pad.lt .btns button{color:#1b1e25;background:rgba(255,255,255,.5)}
+.pad.lt .btns button:hover{background:rgba(255,255,255,.75)}
+.pad:active{transform:scale(.97)}
+.pad.on{box-shadow:0 0 0 3px var(--acc),0 0 18px var(--acc)}
+.pad.sel{outline:2px solid var(--acc);outline-offset:3px}
+.pad .nm{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere;max-height:2.5em;overflow:hidden}
+.pad .sb{font-size:11px;opacity:.85;margin-top:4px;overflow-wrap:anywhere;max-height:2.2em;overflow:hidden}
+.pad .ky{position:absolute;top:6px;left:8px;font-size:11px;opacity:.7;font-family:monospace}
+.pad .rem{position:absolute;top:6px;right:8px;font-size:11px;font-family:monospace;font-weight:700;opacity:.95}
+.btns{position:absolute;left:6px;right:6px;bottom:6px;display:flex;gap:4px}
+.btns button{flex:1;font-size:13px;line-height:1;padding:6px 0;background:rgba(0,0,0,.25);border:0;color:#fff;border-radius:6px}
+.btns button:hover{border:0;background:rgba(0,0,0,.4)}
+.pad:not(.full) .btns button{color:var(--text);background:var(--line)}
+.addpad{aspect-ratio:1;border:2px dashed var(--line);background:transparent;border-radius:16px;color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px}
+.addpad b{font-size:30px;line-height:1;font-weight:400}
+aside{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
+aside h2{font-size:15px;margin:0 0 4px}
+aside .sub{font-size:12px;color:var(--sub);margin-bottom:6px}
+aside label{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
+aside input[type=text],aside input[type=number],aside input[type=file]{width:100%}
+aside input[type=checkbox]{accent-color:var(--acc)}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sw{display:flex;gap:6px;flex-wrap:wrap}
+.sw button{width:26px;height:26px;padding:0;border-radius:50%;border:3px solid transparent;box-shadow:inset 0 0 0 1px rgba(128,128,128,.45)}
+.cc{display:flex!important;align-items:center;gap:8px}
+.cc input{width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer}
+.sw button.sel{border-color:var(--text)}
+#fn{font-size:12px;color:var(--sub);margin-top:6px;overflow-wrap:anywhere}
+.clrbtn{margin-top:14px;width:100%}
+.clrbtn+.clrbtn{margin-top:8px}
+.khead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 4px;font-size:14px;font-weight:600}
+.khead button{padding:3px 10px;font-size:12px;font-weight:400}
+.khelp{font-size:11px;color:var(--sub);line-height:1.5}
+.lkrow{position:relative;border:1px solid var(--line);border-left:5px solid var(--sub);border-radius:10px;padding:8px 10px;margin-top:8px}
+.lkrow small{display:block;font-size:11px;color:var(--sub);margin:6px 0 3px}
+.lkrow select{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
+.lkrow .khelp{margin-top:6px}
+.lkx{position:absolute;top:4px;right:6px;padding:0 8px;font-size:16px;line-height:1.4}
+.lkrow[data-a=stop]{border-left-color:#e5484d}.lkrow[data-a=xf]{border-left-color:#d97b00}.lkrow[data-a=cut]{border-left-color:#8f3b3f}
+.lkrow[data-a=with]{border-left-color:#30a46c}.lkrow[data-a=next]{border-left-color:#6e56cf}.lkrow[data-a=duck]{border-left-color:#0090ff}
+#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:88vw;text-align:center}
+#toast.show{opacity:1}
+.hint{font-size:12px;color:var(--sub);text-align:center;padding:0 16px 24px;line-height:1.7}
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>ポン出しパッド</h1>
+  <label class="ctl">音量 <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
+  <button id="stopAll">■ 全停止</button>
+  <div class="sep"></div>
+  <button id="fsSave" title="選択したフォルダに設定と音声を個別ファイルで保存">📁 フォルダ保存</button>
+  <button id="fsLoad" title="フォルダから設定と音声を読み込み（無いファイルは一覧表示）">📂 フォルダ読込</button>
+  <button id="expZip" title="設定と音声ファイル本体をZIPにまとめてダウンロード（他PCへの持ち出し用）">📦 ZIP書き出し</button>
+  <button id="impZip" title="ZIPから設定と音声を復元">📦 ZIP読み込み</button>
+  <input type="file" id="impFile" accept=".zip,application/zip" hidden>
+  <div class="sep"></div>
+  <button id="reset" class="danger">全消去</button>
+</header>
+<div class="bar">
+  <div id="now">--:--:--</div>
+  <div class="tm">
+    <input type="number" id="tmM" min="0" max="999" value="5" inputmode="numeric">分
+    <input type="number" id="tmS" min="0" max="59" value="0" inputmode="numeric">秒
+    <span id="tmD">05:00</span>
+    <button id="tmGo">開始</button><button id="tmRs">リセット</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div id="grid"></div>
+
+  <aside id="pp">
+    <h2 id="ppt">パッド</h2>
+    <div class="sub" id="pps">パッドの ⚙ で選択</div>
+
+    <label for="nm">名前</label>
+    <input type="text" id="nm" maxlength="30" placeholder="例: 拍手">
+
+    <label>色</label>
+    <div class="sw" id="sw"></div>
+    <label class="cc">好きな色 <input type="color" id="cc" value="#4da3ff"></label>
+
+    <label for="pv">音量</label>
+    <input type="range" id="pv" min="0" max="1" step="0.01">
+
+    <label><input type="checkbox" id="lp"> ループ再生</label>
+
+    <div class="two">
+      <div><label for="fi">フェードイン（秒）</label><input type="number" id="fi" min="0" max="30" step="0.01" inputmode="decimal"></div>
+      <div><label for="fo">フェードアウト（秒）</label><input type="number" id="fo" min="0" max="30" step="0.01" inputmode="decimal"></div>
+    </div>
+
+    <label for="off">再生オフセット（開始位置・秒）</label>
+    <input type="number" id="off" min="0" step="0.01" inputmode="decimal">
+
+    <label for="ae">再生自動終了（秒・0で無効）</label>
+    <input type="number" id="ae" min="0" step="0.01" inputmode="decimal">
+
+    <div class="khead"><span>連動（他のパッドを操作）</span><button id="kadd" type="button">＋追加</button></div>
+    <div class="khelp">このパッドを再生したとき、他のパッドを止めたり鳴らしたりします。</div>
+    <div id="lk"></div>
+
+    <label for="fl">音声・動画ファイル</label>
+    <input type="file" id="fl" accept="audio/*,video/*">
+    <div id="fn"></div>
+
+    <button id="clr" class="danger clrbtn">ファイルを消去</button>
+    <button id="del" class="danger clrbtn">このパッドを削除</button>
+  </aside>
+</div>
+
+<p class="hint">
+  パッド本体タップ or ▶で再生（ループ中は再生ボタンで停止）／ ■ でフェードアウト停止／ ⚙ でプロパティを表示／ ＋ でパッド追加<br>
+  キーボード: 1 2 3 4 / q w e r / a s d f / z x c v（先頭16個）、Space で全停止<br>
+  「📁フォルダ保存／読込」は選んだフォルダに設定＋音声を個別ファイルとして保存します（対応ブラウザのみ）。読込時、フォルダ内に見つからないファイルは一覧で通知します。<br>
+  「📦ZIP書き出し／読み込み」は音声ファイルをそのままの形式でZIPにまとめます。他のPCへ音声ファイルごと持ち出したいときはこちら（全ブラウザで使用可。解凍すれば音声ファイル単体としても取り出せます）。
+</p>
+<div id="toast"></div>
+
+<script>
+const KEY='ponde-pad:v1', DBN='ponde-pad';
+const COLORS=['#e5484d','#f76b15','#f5a524','#30a46c','#12a594','#0090ff','#6e56cf','#d6409f'];
+const PALETTE=['#e5484d','#f76b15','#f5a524','#ffd60a','#a3d900','#30a46c','#12a594','#00b8d9',
+'#0090ff','#3b5bdb','#6e56cf','#a855f7','#d6409f','#ff6b9d','#ff8a65','#8d6e63',
+'#f4a6a6','#ffd0a1','#fbe38e','#b6e3b0','#a5e3dc','#a9d4ff','#cbbcf5','#f2b8dc',
+'#ffffff','#d1d5db','#9ca3af','#6b7280','#374151','#111827'];
+const isLight=c=>{const n=parseInt(c.slice(1),16);return (((n>>16)*299+((n>>8)&255)*587+(n&255)*114)/1000)>165};
+const KEYS=['1','2','3','4','q','w','e','r','a','s','d','f','z','x','c','v'];
+const $=id=>document.getElementById(id);
+const grid=$('grid');
+const urls=new Map(), inst=new Map();
+let pads, db, master=1, cur=0, ctx=null, nextId=0;
+
+const P=id=>pads.find(p=>p.id===id);
+const idx=id=>pads.findIndex(p=>p.id===id);
+const padEl=id=>grid.querySelector('.pad[data-id="'+id+'"]');
+const keyLabel=id=>{const i=idx(id);return KEYS[i]?KEYS[i].toUpperCase():String(i+1)};
+
+function defPad(id,i){return{id,name:'',color:COLORS[i%COLORS.length],vol:1,loop:false,fi:0,fo:0,off:0,ae:0,file:'',kind:'',links:[],fsFile:''}}
+function load(){
+  try{const s=JSON.parse(localStorage.getItem(KEY));if(Array.isArray(s)&&s.length)return s.map((p,i)=>{const q={...defPad(i,i),...p,id:p.id??i};if(!Array.isArray(p.links))q.links=(p.kills||[]).map(t=>({t,a:'stop'}));delete q.kills;return q})}catch(e){}
+  return Array.from({length:16},(_,i)=>defPad(i,i));
+}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(pads))}catch(e){toast('設定を保存できませんでした')}}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove('show'),2600)}
+const num=v=>Math.max(0,Math.round((+v||0)*100)/100);
+const padMeta=({id,name,color,vol,loop,fi,fo,off,ae,file,kind,links,fsFile})=>({id,name,color,vol,loop,fi,fo,off,ae,file,kind,links,fsFile});
+
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DBN,2);
+    r.onupgradeneeded=()=>{
+      const d=r.result;
+      if(!d.objectStoreNames.contains('files'))d.createObjectStore('files');
+      if(!d.objectStoreNames.contains('meta'))d.createObjectStore('meta');
+    };
+    r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error);
+  });
+}
+function tx(store,mode,fn){
+  return new Promise((res,rej)=>{
+    const t=db.transaction(store,mode);
+    const q=fn(t.objectStore(store));
+    t.oncomplete=()=>res(q?q.result:undefined);
+    t.onerror=()=>rej(t.error);
+  });
+}
+const getBlob=i=>tx('files','readonly',s=>s.get(i));
+const putBlob=(i,b)=>tx('files','readwrite',s=>s.put(b,i));
+const delBlob=i=>tx('files','readwrite',s=>s.delete(i));
+const clearBlobs=()=>tx('files','readwrite',s=>s.clear());
+const getMeta=k=>tx('meta','readonly',s=>s.get(k));
+const putMeta=(k,v)=>tx('meta','readwrite',s=>s.put(v,k));
+
+async function urlOf(i){
+  if(!urls.has(i)){
+    const b=await getBlob(i);
+    if(!b)return null;
+    urls.set(i,URL.createObjectURL(b));
+  }
+  return urls.get(i);
+}
+function revoke(i){if(urls.has(i)){URL.revokeObjectURL(urls.get(i));urls.delete(i)}}
+
+function ac(){
+  if(!ctx)ctx=new (window.AudioContext||window.webkitAudioContext)();
+  if(ctx.state==='suspended')ctx.resume();
+  return ctx;
+}
+
+function mk(p){
+  const el=document.createElement('div');
+  el.className='pad';
+  el.dataset.id=p.id;
+  el.innerHTML='<span class="ky"></span><span class="rem"></span><div class="nm"></div><div class="sb"></div><div class="btns"><button class="pl" aria-label="再生">▶</button><button class="st" aria-label="停止">■</button><button class="gr" aria-label="プロパティ">⚙</button></div>';
+  el.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;trigger(p.id)});
+  ['pl','st','gr'].forEach(c=>el.querySelector('.'+c).addEventListener('pointerdown',e=>e.stopPropagation()));
+  el.querySelector('.pl').addEventListener('click',()=>trigger(p.id));
+  el.querySelector('.st').addEventListener('click',()=>stopPad(p.id));
+  el.querySelector('.gr').addEventListener('click',()=>select(p.id));
+  return el;
+}
+function buildGrid(){
+  grid.innerHTML='';
+  pads.forEach(p=>grid.appendChild(mk(p)));
+  const a=document.createElement('button');
+  a.className='addpad';a.type='button';
+  a.innerHTML='<b>＋</b>パッド追加';
+  a.onclick=addPad;
+  grid.appendChild(a);
+  pads.forEach(p=>render(p.id));
+}
+
+function render(id){
+  const p=P(id), el=padEl(id);
+  if(!p||!el)return;
+  const full=!!p.file;
+  el.classList.toggle('full',full);
+  if(full)el.style.setProperty('--c',p.color);else el.style.removeProperty('--c');
+  el.classList.toggle('lt',full&&isLight(p.color));
+  el.querySelector('.ky').textContent=keyLabel(id);
+  el.querySelector('.nm').textContent=p.name||(full?'(無名)':'空き');
+  const kn=p.links.filter(l=>P(l.t)).length;
+  el.querySelector('.sb').textContent=full?((p.kind==='video'?'🎬 ':'🔊 ')+p.file+(kn?' ⛓'+kn:'')):'タップで設定';
+  el.classList.toggle('on',(inst.get(id)?.size||0)>0);
+  el.classList.toggle('sel',id===cur);
+}
+const duckN=new Map(), DUCK=0.25;
+const vf=id=>(duckN.get(id)>0?DUCK:1);
+function applyVol(id){
+  const c=ac(),p=P(id);if(!p)return;
+  inst.get(id)?.forEach(x=>{if(!x.stopping)x.g.gain.setTargetAtTime(p.vol*master*vf(id),c.currentTime,0.1)});
+}
+function releaseDucks(x){(x.ducks||[]).splice(0).forEach(t=>{duckN.set(t,Math.max(0,(duckN.get(t)||1)-1));applyVol(t)})}
+function fireNext(id){const p=P(id);if(p)p.links.filter(l=>l.a==='next').forEach(l=>trigger(l.t,new Set()))}
+function runLinks(p,x,chain){
+  p.links.forEach(l=>{
+    const t=P(l.t);if(!t||t.id===p.id)return;
+    if(l.a==='stop')stopPad(t.id);
+    else if(l.a==='cut')stopPad(t.id,true);
+    else if(l.a==='xf')stopPad(t.id,false,p.fi>0?p.fi:t.fo);
+    else if(l.a==='with')trigger(t.id,chain);
+    else if(l.a==='duck'){duckN.set(t.id,(duckN.get(t.id)||0)+1);(x.ducks||(x.ducks=[])).push(t.id);applyVol(t.id)}
+  });
+}
+
+async function trigger(id,chain){
+  const p=P(id);
+  if(!p)return;
+  const auto=!!chain;
+  if(!chain)chain=new Set();
+  if(chain.has(id))return;
+  chain.add(id);
+  if(!p.file){if(!auto)select(id);return}
+  const set=inst.get(id)||new Set();
+  if(auto){if(set.size)return}
+  else if(p.loop&&set.size){stopPad(id);return}
+  let url;
+  try{url=await urlOf(id)}catch(e){url=null}
+  if(!url){toast('音声ファイルが見つかりません');return}
+
+  const c=ac();
+  const a=new Audio(url);
+  a.loop=p.loop;
+  const src=c.createMediaElementSource(a);
+  const g=c.createGain();
+  src.connect(g).connect(c.destination);
+
+  const target=p.vol*master*vf(id), now=c.currentTime;
+  g.gain.setValueAtTime(p.fi>0?0:target,now);
+  if(p.fi>0)g.gain.linearRampToValueAtTime(target,now+p.fi);
+
+  const x={a,g,src,i:id,stopping:false};
+  a.addEventListener('loadedmetadata',()=>{
+    const o=Math.min(p.off,Math.max(0,a.duration-0.05));
+    if(o>0)a.currentTime=o;
+  },{once:true});
+  a.onended=()=>{const nat=!x.stopping;finish(x);if(nat)fireNext(id)};
+  set.add(x);inst.set(id,set);render(id);
+  runLinks(p,x,chain);
+  if(p.ae>0){x.endAt=Date.now()+p.ae*1000;x.timer=setTimeout(()=>{stopInst(x,p.fo);fireNext(id)},p.ae*1000);}
+  try{await a.play()}catch(e){finish(x);toast('再生できませんでした')}
+}
+
+function finish(x){
+  releaseDucks(x);
+  const s=inst.get(x.i);
+  if(s)s.delete(x);
+  clearTimeout(x.timer);
+  try{x.src.disconnect();x.g.disconnect()}catch(e){}
+  x.a.pause();
+  render(x.i);
+}
+function stopInst(x,fo){
+  releaseDucks(x);
+  if(x.stopping)return;
+  x.stopping=true;
+  if(!(fo>0)){finish(x);return}
+  const c=ac(), now=c.currentTime;
+  x.g.gain.cancelScheduledValues(now);
+  x.g.gain.setValueAtTime(x.g.gain.value,now);
+  x.g.gain.linearRampToValueAtTime(0,now+fo);
+  setTimeout(()=>finish(x),fo*1000+30);
+}
+function stopPad(id,instant,fo){const p=P(id);inst.get(id)?.forEach(x=>stopInst(x,instant||!p?0:(fo??p.fo)))}
+function stopAll(){inst.forEach((_,id)=>stopPad(id))}
+
+const ACTS=[
+ {k:'stop',l:'止める（フェードアウト）',d:'相手をフェードアウトして止めます。秒数は相手のフェードアウト設定です。'},
+ {k:'xf',l:'クロスフェードで入れ替える',d:'このパッドのフェードイン秒数をかけて相手を消します。曲の入れ替えに。'},
+ {k:'cut',l:'すぐ止める',d:'相手をフェードなしで止めます。'},
+ {k:'with',l:'同時に鳴らす',d:'相手も同時に鳴らします。'},
+ {k:'next',l:'終わったら鳴らす',d:'このパッドが終わったら（自動終了も含む）相手を鳴らします。'},
+ {k:'duck',l:'音量を下げる',d:'このパッドが鳴っている間だけ、相手の音量を25%に下げます。'}
+];
+function renderKill(){
+  const box=$('lk');box.innerHTML='';
+  const cp=P(cur);if(!cp)return;
+  $('kadd').disabled=pads.length<2;
+  if(!cp.links.length){
+    const e=document.createElement('div');e.className='khelp';e.style.marginTop='8px';
+    e.textContent='連動は設定されていません。「＋追加」で作れます。';
+    box.appendChild(e);return;
+  }
+  const mkLabel=t=>{const l=document.createElement('small');l.textContent=t;return l};
+  cp.links.forEach((l,n)=>{
+    const row=document.createElement('div');row.className='lkrow';row.dataset.a=l.a;
+    const sp=document.createElement('select');
+    pads.filter(q=>q.id!==cur).forEach(q=>{
+      const o=document.createElement('option');o.value=q.id;
+      o.textContent=keyLabel(q.id)+'　'+(q.name||(q.file?'(無名)':'空き'));
+      sp.appendChild(o);
+    });
+    sp.value=l.t;
+    const sa=document.createElement('select');
+    ACTS.forEach(a=>{const o=document.createElement('option');o.value=a.k;o.textContent=a.l;sa.appendChild(o)});
+    sa.value=l.a;
+    const d=document.createElement('div');d.className='khelp';
+    const info=()=>{d.textContent=ACTS.find(a=>a.k===l.a).d};info();
+    sp.onchange=()=>{l.t=+sp.value;save();render(cur)};
+    sa.onchange=()=>{l.a=sa.value;row.dataset.a=l.a;info();save()};
+    const x=document.createElement('button');x.type='button';x.className='lkx';x.textContent='×';x.title='この連動を削除';
+    x.onclick=()=>{cp.links.splice(n,1);save();renderKill();render(cur)};
+    row.append(x,mkLabel('相手のパッド'),sp,mkLabel('どうする'),sa,d);
+    box.appendChild(row);
+  });
+}
+$('cc').oninput=()=>{
+  P(cur).color=$('cc').value;save();render(cur);
+  [...$('sw').children].forEach(x=>x.classList.remove('sel'));
+};
+$('kadd').onclick=()=>{
+  const cp=P(cur);
+  const o=pads.find(q=>q.id!==cur&&!cp.links.some(l=>l.t===q.id))||pads.find(q=>q.id!==cur);
+  if(!o)return;
+  cp.links.push({t:o.id,a:'stop'});
+  save();renderKill();render(cur);
+};
+
+function select(id){
+  cur=id;
+  const p=P(id);
+  if(!p)return;
+  $('ppt').textContent='パッド '+keyLabel(id)+'（'+(idx(id)+1)+'）';
+  $('pps').textContent=p.file?'編集中':'音声未設定。ファイルを選択してください';
+  $('nm').value=p.name;
+  $('pv').value=p.vol;
+  $('lp').checked=p.loop;
+  $('fi').value=p.fi;
+  $('fo').value=p.fo;
+  $('off').value=p.off;
+  $('ae').value=p.ae;
+  $('fl').value='';
+  $('fn').textContent=p.file?('現在: '+p.file+(p.kind==='video'?'（動画・音声のみ再生）':'')):'未設定';
+  $('del').disabled=pads.length<=1;
+  $('sw').innerHTML='';
+  $('cc').value=p.color;
+  PALETTE.forEach(c=>{
+    const b=document.createElement('button');
+    b.style.background=c;
+    if(c===p.color)b.classList.add('sel');
+    b.onclick=()=>{
+      P(cur).color=c;$('cc').value=c;save();render(cur);
+      [...$('sw').children].forEach(x=>x.classList.toggle('sel',x===b));
+    };
+    $('sw').appendChild(b);
+  });
+  renderKill();
+  pads.forEach(q=>render(q.id));
+}
+
+function addPad(){
+  const p=defPad(nextId++,pads.length);
+  pads.push(p);save();buildGrid();select(p.id);
+  padEl(p.id)?.scrollIntoView({block:'nearest',behavior:'smooth'});
+  toast('パッドを追加しました（全'+pads.length+'個）');
+}
+$('del').onclick=async()=>{
+  if(pads.length<=1)return;
+  const id=cur,p=P(id);
+  if(!confirm('パッド '+keyLabel(id)+(p.name?'「'+p.name+'」':'')+' を削除しますか？'))return;
+  stopPad(id,true);
+  try{await delBlob(id)}catch(e){}
+  revoke(id);
+  const i=idx(id);
+  pads.splice(i,1);
+  pads.forEach(q=>{q.links=q.links.filter(l=>l.t!==id)});
+  save();buildGrid();
+  select(pads[Math.min(i,pads.length-1)].id);
+  toast('削除しました');
+};
+
+$('nm').oninput=()=>{P(cur).name=$('nm').value;save();render(cur);renderKill()};
+$('pv').oninput=()=>{P(cur).vol=+$('pv').value;save();applyVol(cur)};
+$('lp').onchange=()=>{P(cur).loop=$('lp').checked;save()};
+$('fi').oninput=()=>{P(cur).fi=num($('fi').value);save()};
+$('fo').oninput=()=>{P(cur).fo=num($('fo').value);save()};
+$('off').oninput=()=>{P(cur).off=num($('off').value);save()};
+$('ae').oninput=()=>{P(cur).ae=num($('ae').value);save()};
+$('fl').onchange=async()=>{
+  const f=$('fl').files[0];
+  if(!f)return;
+  const i=cur;
+  try{
+    stopPad(i,true);
+    await putBlob(i,f);
+    revoke(i);
+    const p=P(i);
+    p.file=f.name;
+    p.kind=(f.type.startsWith('video/')||/\.(mp4|mov|m4v|webm|mkv)$/i.test(f.name))?'video':'audio';
+    p.fsFile='';
+    save();select(i);
+    toast('登録しました');
+  }catch(e){toast('ファイルを保存できませんでした')}
+};
+$('clr').onclick=async()=>{
+  const i=cur;
+  stopPad(i,true);
+  try{await delBlob(i)}catch(e){}
+  revoke(i);
+  Object.assign(P(i),{file:'',kind:'',loop:false,fsFile:''});
+  save();select(i);
+};
+
+$('master').oninput=e=>{master=+e.target.value;inst.forEach((_,id)=>applyVol(id))};
+$('stopAll').onclick=stopAll;
+$('reset').onclick=async()=>{
+  if(!confirm('全パッドの設定と音声ファイルを消去しますか？（フォルダ連携も解除されます）'))return;
+  inst.forEach((_,id)=>stopPad(id,true));
+  urls.forEach(u=>URL.revokeObjectURL(u));urls.clear();
+  try{await clearBlobs()}catch(e){}
+  try{await tx('meta','readwrite',s=>s.clear())}catch(e){}
+  dirHandle=null;
+  localStorage.removeItem(KEY);
+  pads=Array.from({length:16},(_,i)=>defPad(i,i));
+  nextId=16;
+  buildGrid();select(0);
+  toast('消去しました');
+};
+
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey||e.metaKey||e.altKey)return;
+  if(e.target.matches&&e.target.matches('input,textarea,select'))return;
+  if(e.code==='Space'){e.preventDefault();stopAll();return}
+  const i=KEYS.indexOf(e.key.toLowerCase());
+  if(i>=0&&!e.repeat&&pads[i])trigger(pads[i].id);
+});
+
+/* ---------- フォルダ連携（File System Access API） ---------- */
+const hasFS='showDirectoryPicker' in window;
+let dirHandle=null;
+
+function fsNameFor(p){
+  const safe=(p.file||'audio').normalize('NFC').replace(/[\/\\:*?"<>|]/g,'_').slice(0,80);
+  return 'pad_'+p.id+'_'+safe;
+}
+async function writeFile(dir,name,blob){
+  const fh=await dir.getFileHandle(name,{create:true});
+  const w=await fh.createWritable();
+  await w.write(blob);
+  await w.close();
+}
+async function pickDir(){
+  const h=await window.showDirectoryPicker({id:'ponde-pad',mode:'readwrite'});
+  dirHandle=h;
+  try{await putMeta('dir',h)}catch(e){}
+  return h;
+}
+async function ensureDir(){
+  if(!hasFS)throw new Error('unsupported');
+  if(!dirHandle){
+    try{const h=await getMeta('dir');if(h)dirHandle=h}catch(e){}
+  }
+  if(!dirHandle)return pickDir();
+  let perm;
+  try{perm=await dirHandle.queryPermission({mode:'readwrite'})}catch(e){return pickDir()}
+  if(perm!=='granted'){
+    try{perm=await dirHandle.requestPermission({mode:'readwrite'})}catch(e){perm='denied'}
+    if(perm!=='granted')return pickDir();
+  }
+  return dirHandle;
+}
+async function saveToFolder(){
+  if(!hasFS){toast('このブラウザはフォルダ保存に対応していません（⬇書き出しをご利用ください）');return}
+  let dir;
+  try{dir=await ensureDir()}catch(e){toast('フォルダへのアクセスが許可されませんでした');return}
+  try{
+    let n=0;
+    for(const p of pads){
+      if(p.file){
+        const blob=await getBlob(p.id);
+        if(blob){p.fsFile=fsNameFor(p);await writeFile(dir,p.fsFile,blob);n++}
+        else p.fsFile='';
+      }else{
+        p.fsFile='';
+      }
+    }
+    const meta={version:1,savedAt:Date.now(),pads:pads.map(padMeta)};
+    await writeFile(dir,'data.json',new Blob([JSON.stringify(meta,null,0)],{type:'application/json'}));
+    save();
+    toast('フォルダに保存しました（音声'+n+'件）');
+  }catch(e){toast('保存中にエラーが発生しました')}
+}
+async function loadFromFolder(){
+  if(!hasFS){toast('このブラウザはフォルダ読込に対応していません（⬆読み込みをご利用ください）');return}
+  let dir;
+  try{dir=await ensureDir()}catch(e){toast('フォルダへのアクセスが許可されませんでした');return}
+  let meta;
+  try{
+    const fh=await dir.getFileHandle('data.json',{create:false});
+    const f=await fh.getFile();
+    meta=JSON.parse(await f.text());
+  }catch(e){toast('このフォルダに data.json が見つかりません');return}
+  if(!Array.isArray(meta.pads)){toast('不正なデータです');return}
+  stopAll();
+  const missing=[];
+  let ok=0;
+  for(const mp of meta.pads){
+    if(mp.file&&mp.fsFile){
+      try{
+        const fh=await dir.getFileHandle(mp.fsFile,{create:false});
+        const f=await fh.getFile();
+        await putBlob(mp.id,f);
+        revoke(mp.id);
+        ok++;
+      }catch(e){
+        missing.push(mp.name||mp.file);
+        mp.file='';mp.kind='';mp.fsFile='';
+      }
+    }
+  }
+  pads=meta.pads.map((p,i)=>({...defPad(p.id,i),...p}));
+  nextId=Math.max(-1,...pads.map(p=>p.id))+1;
+  buildGrid();select(pads[0].id);save();
+  toast(missing.length
+    ? ('読込完了（'+ok+'件）。フォルダに見つからなかったファイル: '+missing.join('、'))
+    : ('フォルダから読み込みました（'+ok+'件）'));
+}
+$('fsSave').onclick=saveToFolder;
+$('fsLoad').onclick=loadFromFolder;
+if(!hasFS){$('fsSave').disabled=true;$('fsLoad').disabled=true;$('fsSave').title='非対応ブラウザです（Chrome/Edge推奨）';$('fsLoad').title=$('fsSave').title}
+
+/* ---------- ZIP書き出し／読み込み（音声ファイルを実ファイルのまま持ち出す） ---------- */
+function guessMime(name){
+  const ext=(name.split('.').pop()||'').toLowerCase();
+  const map={mp3:'audio/mpeg',wav:'audio/wav',ogg:'audio/ogg',oga:'audio/ogg',m4a:'audio/mp4',aac:'audio/aac',flac:'audio/flac',opus:'audio/opus',webm:'audio/webm',mp4:'video/mp4',mov:'video/quicktime',m4v:'video/mp4',mkv:'video/x-matroska',avi:'video/x-msvideo'};
+  return map[ext]||'application/octet-stream';
+}
+async function exportZip(){
+  if(typeof JSZip==='undefined'){toast('ZIP機能の読み込みに失敗しました（オフラインの場合は読み込めません）');return}
+  toast('ZIP作成中…');
+  try{
+    const zip=new JSZip();
+    const audioDir=zip.folder('audio');
+    const used=new Set();
+    let n=0;
+    const padsOut=pads.map(p=>padMeta(p));
+    for(let i=0;i<pads.length;i++){
+      const p=pads[i];
+      padsOut[i].fsFile='';
+      padsOut[i].zipFile='';
+      if(p.file){
+        const blob=await getBlob(p.id);
+        if(blob){
+          const base=p.file.replace(/[\/\\]/g,'_')||('pad_'+p.id);
+          let name=base,k=1;
+          while(used.has(name)){const dot=base.lastIndexOf('.');name=dot>0?(base.slice(0,dot)+'_'+(k++)+base.slice(dot)):(base+'_'+(k++))}
+          used.add(name);
+          audioDir.file(name,blob);
+          padsOut[i].zipFile='audio/'+name;
+          n++;
+        }
+      }
+    }
+    zip.file('data.json',JSON.stringify({version:1,exportedAt:Date.now(),pads:padsOut}));
+    const blob=await zip.generateAsync({type:'blob'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download='ponde-pad-'+new Date().toISOString().slice(0,10)+'.zip';
+    document.body.appendChild(a);a.click();a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),10000);
+    toast('ZIPを書き出しました（音声'+n+'件）');
+  }catch(e){toast('ZIP作成に失敗しました')}
+}
+async function importZipFile(file){
+  if(typeof JSZip==='undefined'){toast('ZIP機能の読み込みに失敗しました（オフラインの場合は読み込めません）');return}
+  toast('ZIP読み込み中…');
+  try{
+    const zip=await JSZip.loadAsync(file);
+    const dj=zip.file('data.json');
+    if(!dj){toast('ZIP内にdata.jsonが見つかりません');return}
+    const meta=JSON.parse(await dj.async('string'));
+    if(!Array.isArray(meta.pads)){toast('不正なファイルです');return}
+    stopAll();
+    const missing=[];
+    let n=0;
+    for(const mp of meta.pads){
+      if(mp.file&&mp.zipFile){
+        const zf=zip.file(mp.zipFile);
+        if(zf){
+          const raw=await zf.async('blob');
+          await putBlob(mp.id,new File([raw],mp.file,{type:raw.type||guessMime(mp.file)}));
+          revoke(mp.id);
+          n++;
+        }else{missing.push(mp.name||mp.file);mp.file='';mp.kind=''}
+      }
+    }
+    pads=meta.pads.map((p,i)=>({...defPad(p.id,i),...p,fsFile:''}));
+    nextId=Math.max(-1,...pads.map(p=>p.id))+1;
+    buildGrid();select(pads[0].id);save();
+    toast(missing.length
+      ? ('読込完了（'+n+'件）。ZIP内に見つからなかった: '+missing.join('、'))
+      : ('ZIPから読み込みました（音声'+n+'件）'));
+  }catch(e){toast('ZIP読み込みに失敗しました（ファイルが壊れているか形式が違います）')}
+}
+$('expZip').onclick=exportZip;
+$('impZip').onclick=()=>$('impFile').click();
+$('impFile').onchange=()=>{const f=$('impFile').files[0];if(f)importZipFile(f);$('impFile').value=''};
+
+pads=load();
+nextId=Math.max(-1,...pads.map(p=>p.id))+1;
+cur=pads[0].id;
+buildGrid();
+select(cur);
+save();
+(async()=>{
+  try{
+    db=await openDB();
+    for(const p of pads){if(p.file){try{await urlOf(p.id)}catch(e){}}}
+    try{const h=await getMeta('dir');if(h)dirHandle=h}catch(e){}
+  }catch(e){toast('音声データの保存機能が使えません')}
+})();
+
+// 自動終了までの残り秒数を表示
+setInterval(()=>{
+  const now=Date.now();
+  grid.querySelectorAll('.pad').forEach(el=>{
+    let rem=null;
+    inst.get(+el.dataset.id)?.forEach(x=>{
+      if(x.endAt&&!x.stopping){const r=(x.endAt-now)/1000;if(rem===null||r<rem)rem=r;}
+    });
+    el.querySelector('.rem').textContent=rem===null?'':'あと '+Math.max(0,rem).toFixed(1)+'秒';
+  });
+},100);
+
+// 時計・タイマー
+const tmM=$('tmM'), tmS=$('tmS'), tmD=$('tmD'), tmGo=$('tmGo');
+let tmLeft=0, tmEnd=0, tmRun=false;
+function tmInit(){if(!tmRun)tmLeft=(+tmM.value||0)*60000+(+tmS.value||0)*1000}
+function tmShow(ms){const s=Math.ceil(ms/1000);tmD.textContent=String(Math.floor(s/60)).padStart(2,'0')+':'+String(s%60).padStart(2,'0')}
+function beep(){try{const c=ac(),o=c.createOscillator(),g=c.createGain();o.connect(g).connect(c.destination);o.frequency.value=880;g.gain.setValueAtTime(0.3,c.currentTime);g.gain.exponentialRampToValueAtTime(0.001,c.currentTime+0.8);o.start();o.stop(c.currentTime+0.8)}catch(e){}}
+tmGo.onclick=()=>{
+  if(tmRun){tmLeft=Math.max(0,tmEnd-Date.now());tmRun=false;tmGo.textContent='開始';tmShow(tmLeft);return}
+  if(tmLeft<=0)tmInit();
+  if(tmLeft<=0){toast('時間を設定してください');return}
+  tmEnd=Date.now()+tmLeft;tmRun=true;tmGo.textContent='一時停止';
+};
+$('tmRs').onclick=()=>{tmRun=false;tmLeft=0;tmGo.textContent='開始';tmInit();tmShow(tmLeft)};
+tmM.oninput=tmS.oninput=()=>{if(!tmRun){tmInit();tmShow(tmLeft)}};
+tmInit();tmShow(tmLeft);
+setInterval(()=>{
+  $('now').textContent=new Date().toLocaleTimeString('ja-JP',{hour12:false});
+  if(tmRun){
+    const left=tmEnd-Date.now();
+    if(left<=0){tmRun=false;tmLeft=0;tmGo.textContent='開始';tmShow(0);toast('タイマー終了');beep()}
+    else tmShow(left);
+  }
+},200);
+</script>
+</body>
+</html>
