@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MIDI Player – 88-Key Physical Panning</title>
+  <title>MIDI Player – 2D 物理スピーカー音響モデリング & 88鍵ビジュアライザー</title>
 
   <!-- SpessaSynth: 高性能 AudioWorklet ベース SF2/SF3 シンセ -->
   <script type="importmap">
@@ -17,14 +17,19 @@
 
   <style>
     :root {
-      --bg: #0e0f13;
-      --panel: #1a1d24;
-      --border: #2c3040;
-      --text: #e0e2ea;
-      --sub: #7a8299;
+      --bg: #0b0c10;
+      --panel: #16181f;
+      --panel-hover: #1e212b;
+      --border: #262a38;
+      --text: #e2e5ee;
+      --sub: #7a8298;
       --acc: #4da3ff;
       --green: #30a46c;
+      --orange: #f5a524;
       --red: #e5484d;
+      --spk-l: #3b82f6;
+      --spk-r: #ec4899;
+      --listener: #10b981;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -34,44 +39,61 @@
       display: flex;
       flex-direction: column;
       align-items: center;
-      padding: 24px 16px 48px;
+      padding: 20px 16px 48px;
       min-height: 100vh;
     }
-    h1 { font-size: 20px; margin-bottom: 4px; }
-    .subtitle { font-size: 12px; color: var(--sub); margin-bottom: 20px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.02em; }
+    .subtitle { font-size: 12px; color: var(--sub); margin-bottom: 18px; text-align: center; }
 
-    /* ─── コントロールパネル ─── */
+    /* ─── メインレイアウト ─── */
+    .container {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
     .panel {
       background: var(--panel);
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px 20px;
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 16px;
+    }
+    .panel-title {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--sub);
+      text-transform: uppercase;
+      letter-spacing: .08em;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    /* ─── コントロール ─── */
+    .row {
       display: flex;
       flex-wrap: wrap;
       gap: 12px 20px;
       align-items: center;
     }
-    .panel-title {
-      width: 100%;
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--sub);
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      margin-bottom: 2px;
-    }
-    label { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 6px; }
-    select, input[type=range] {
+    label { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 8px; }
+    select, input[type=number], input[type=range] {
       font: inherit;
       color: var(--text);
       background: var(--bg);
       border: 1px solid var(--border);
       border-radius: 6px;
     }
-    select { padding: 5px 8px; cursor: pointer; }
+    select { padding: 6px 10px; cursor: pointer; }
+    input[type=number] {
+      width: 72px;
+      padding: 5px 8px;
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+    }
     input[type=range] { cursor: pointer; accent-color: var(--acc); width: 120px; }
     input[type=file] { font: inherit; color: var(--sub); font-size: 12px; }
 
@@ -86,7 +108,7 @@
       cursor: pointer;
       transition: border-color .15s, background .15s;
     }
-    button:hover:not(:disabled) { border-color: var(--acc); }
+    button:hover:not(:disabled) { border-color: var(--acc); background: var(--panel-hover); }
     button:disabled { opacity: .4; cursor: default; }
     button.primary {
       background: var(--acc);
@@ -96,16 +118,87 @@
     }
     button.primary:hover:not(:disabled) { filter: brightness(1.1); }
     button.danger { color: var(--red); border-color: var(--red); }
+    button.preset-btn {
+      padding: 5px 10px;
+      font-size: 11px;
+      background: rgba(255,255,255,0.04);
+    }
 
-    .val { min-width: 38px; font-variant-numeric: tabular-nums; color: var(--acc); font-weight: 600; font-size: 13px; }
+    .val { min-width: 44px; font-variant-numeric: tabular-nums; color: var(--acc); font-weight: 600; font-size: 13px; }
+
+    /* ─── 2D スピーカー見取り図 (Canvas) ─── */
+    .speaker-stage-wrap {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+    }
+    @media (min-width: 820px) {
+      .speaker-stage-wrap {
+        grid-template-columns: 460px 1fr;
+      }
+    }
+
+    #stage-canvas-container {
+      position: relative;
+      width: 100%;
+      height: 380px;
+      background: #08090d;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      cursor: crosshair;
+      user-select: none;
+      touch-action: none;
+    }
+    #stage-canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    .canvas-overlay-hint {
+      position: absolute;
+      top: 8px;
+      left: 12px;
+      font-size: 11px;
+      color: #62697e;
+      pointer-events: none;
+    }
+
+    /* ─── パラメータ一覧 ─── */
+    .param-group {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .param-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+    }
+    .param-label {
+      color: var(--text);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .param-badge {
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      display: inline-block;
+    }
+    .param-inputs {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .unit { font-size: 12px; color: var(--sub); min-width: 22px; }
 
     /* ─── ステータスバー ─── */
     #status-bar {
-      width: 100%;
-      max-width: 900px;
       font-size: 12px;
       color: var(--sub);
-      margin-bottom: 8px;
       display: flex;
       align-items: center;
       gap: 8px;
@@ -117,24 +210,15 @@
       flex-shrink: 0;
     }
     #status-dot.ok   { background: var(--green); }
-    #status-dot.warn { background: #f5a524; }
+    #status-dot.warn { background: var(--orange); }
     #status-dot.err  { background: var(--red); }
     #status-dot.play { background: var(--acc); animation: pulse .8s infinite alternate; }
     @keyframes pulse { to { opacity: .3; } }
 
     /* ─── シークバー ─── */
-    #seek-wrap {
-      width: 100%;
-      max-width: 900px;
-      margin-bottom: 12px;
-      display: none;
-    }
+    #seek-wrap { display: none; }
     #seek-wrap.visible { display: block; }
-    #seek-bar {
-      width: 100%;
-      accent-color: var(--acc);
-      cursor: pointer;
-    }
+    #seek-bar { width: 100%; accent-color: var(--acc); cursor: pointer; }
     #time-label {
       font-size: 11px;
       color: var(--sub);
@@ -144,35 +228,30 @@
     }
 
     /* ─── ピアノ鍵盤 ─── */
-    #piano-wrap {
-      width: 100%;
-      max-width: 900px;
-    }
     #piano-container {
       position: relative;
-      height: 110px;
+      height: 105px;
       width: 100%;
-      background: #0a0b0e;
+      background: #08090d;
       border: 1px solid var(--border);
       border-radius: 6px;
       overflow: hidden;
     }
     .key { position: absolute; bottom: 0; border-radius: 0 0 3px 3px; }
     .white-key {
-      background: #f0f0f0;
+      background: #ededed;
       height: 100%;
       border-right: 1px solid #bbb;
       z-index: 1;
-      transition: background .04s;
+      transition: background .03s;
     }
     .black-key {
-      background: #1a1a1a;
+      background: #17181c;
       height: 62%;
       border: 1px solid #000;
       z-index: 2;
-      transition: background .04s;
+      transition: background .03s;
     }
-    /* チャンネル別に色分け（16色） */
     .active-0  { background: #4da3ff !important; }
     .active-1  { background: #30a46c !important; }
     .active-2  { background: #f5a524 !important; }
@@ -204,9 +283,6 @@
       display: flex;
       flex-wrap: wrap;
       gap: 6px 12px;
-      width: 100%;
-      max-width: 900px;
-      margin-top: 12px;
       font-size: 11px;
     }
     .ch-chip {
@@ -246,61 +322,142 @@
 </head>
 <body>
 
-<h1>🎹 MIDI Player – 88-Key Physical Panning</h1>
-<p class="subtitle">SpessaSynth (AudioWorklet) + SoundFont サンプル再生 ／ ノート数が多くてもフリーズしません</p>
+<div class="container">
+  <header style="text-align: center;">
+    <h1>📐 2D 物理スピーカー音響モデリング & MIDI Player</h1>
+    <p class="subtitle">スピーカーとリスナーの距離・位置をcm単位でシミュレート ／ Web Audio HRTF 空間立体音響</p>
+  </header>
 
-<!-- ─── ファイル読み込み ─── -->
-<div class="panel">
-  <span class="panel-title">ファイル</span>
-  <label>MIDI <input type="file" id="midi-upload" accept=".mid,.midi,.kar"></label>
-  <label>SoundFont (SF2/SF3)
-    <input type="file" id="sf-upload" accept=".sf2,.sf3,.sfogg,.dls">
-  </label>
-  <button id="sf-default-btn">🌐 デフォルト SF を使う (GeneralUser GS)</button>
-</div>
+  <!-- ─── 2D スピーカー・音響ステージ設定 ─── -->
+  <div class="panel">
+    <div class="panel-title">
+      <span>2D 空間音響ステージ (俯瞰ビュー)</span>
+      <div style="display:flex; gap:6px;">
+        <button class="preset-btn" data-preset="desktop">🖥️ 卓上ニアフィールド (52cm / 50cm)</button>
+        <button class="preset-btn" data-preset="triangle">📐 正三角形モニター (90cm / 90cm)</button>
+        <button class="preset-btn" data-preset="piano">🎹 ピアノ演奏席 (123cm / 45cm)</button>
+        <button class="preset-btn" data-preset="living">🛋️ リビング (180cm / 220cm)</button>
+      </div>
+    </div>
 
-<!-- ─── 再生コントロール ─── -->
-<div class="panel">
-  <span class="panel-title">再生</span>
-  <button id="play-btn" class="primary" disabled>▶ 再生</button>
-  <button id="pause-btn" disabled>⏸ 一時停止</button>
-  <button id="stop-btn" class="danger" disabled>■ 停止</button>
-  <label>
-    音量
-    <input type="range" id="vol-slider" min="0" max="200" value="100" step="1">
-    <span class="val" id="vol-val">100%</span>
-  </label>
-  <label>
-    テンポ
-    <input type="range" id="tempo-slider" min="25" max="300" value="100" step="1">
-    <span class="val" id="tempo-val">100%</span>
-  </label>
-</div>
+    <div class="speaker-stage-wrap">
+      <!-- 2D Canvas -->
+      <div id="stage-canvas-container">
+        <canvas id="stage-canvas"></canvas>
+        <div class="canvas-overlay-hint">ドラッグしてスピーカー・リスナーを移動</div>
+      </div>
 
-<!-- ─── ステータス ─── -->
-<div id="status-bar">
-  <div id="status-dot"></div>
-  <span id="status-msg">SoundFont または MIDI ファイルを選択してください</span>
-</div>
+      <!-- cm 単位パラメータ -->
+      <div class="param-group">
+        <div class="param-row">
+          <span class="param-label">
+            <span class="param-badge" style="background: var(--spk-l);"></span>
+            スピーカー間隔 (Spread)
+          </span>
+          <div class="param-inputs">
+            <input type="range" id="spk-dist-slider" min="15" max="300" value="52" step="1">
+            <input type="number" id="spk-dist-num" min="15" max="300" value="52" step="0.5">
+            <span class="unit">cm</span>
+          </div>
+        </div>
 
-<!-- ─── シークバー ─── -->
-<div id="seek-wrap">
-  <input type="range" id="seek-bar" min="0" max="1000" value="0">
-  <div id="time-label">0:00 / 0:00</div>
-</div>
+        <div class="param-row">
+          <span class="param-label">
+            <span class="param-badge" style="background: var(--listener);"></span>
+            リスナー前後距離 (Depth)
+          </span>
+          <div class="param-inputs">
+            <input type="range" id="list-depth-slider" min="15" max="300" value="50" step="1">
+            <input type="number" id="list-depth-num" min="15" max="300" value="50" step="0.5">
+            <span class="unit">cm</span>
+          </div>
+        </div>
 
-<!-- ─── 鍵盤 ─── -->
-<div id="piano-wrap">
-  <div id="piano-container"></div>
-  <div id="speaker-info">
-    <span>◀ L (A0 / Note 21)</span>
-    <span>Center (F4 付近)</span>
-    <span>R (C8 / Note 108) ▶</span>
+        <div class="param-row">
+          <span class="param-label">
+            リスナー左右位置 (Offset X)
+          </span>
+          <div class="param-inputs">
+            <input type="range" id="list-x-slider" min="-100" max="100" value="0" step="1">
+            <input type="number" id="list-x-num" min="-100" max="100" value="0" step="0.5">
+            <span class="unit">cm</span>
+          </div>
+        </div>
+
+        <div class="param-row">
+          <span class="param-label">
+            スピーカー内振り角 (Toe-in)
+          </span>
+          <div class="param-inputs">
+            <input type="range" id="toein-slider" min="0" max="60" value="15" step="1">
+            <input type="number" id="toein-num" min="0" max="60" value="15" step="1">
+            <span class="unit">°</span>
+          </div>
+        </div>
+
+        <div class="param-row">
+          <span class="param-label">立体音響方式</span>
+          <select id="spatial-mode">
+            <option value="hrtf">HRTF バイノーラル 3D (ヘッドホン推奨)</option>
+            <option value="direct">ダイレクト・ステレオパン (等パワー)</option>
+          </select>
+        </div>
+
+        <div style="font-size: 11px; color: var(--sub); line-height: 1.6; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;">
+          💡 <b>cm単位の厳密な物理伝達</b>: スピーカーと両耳の座標から到達距離・入射角・減衰をリアルタイム演算します。ヘッドホンやイヤホンで聴くと、実際に指定した距離・位置にスピーカーがあるように聴こえます。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── ファイル & 再生パネル ─── -->
+  <div class="panel">
+    <div class="panel-title">MIDI & サウンドフォント</div>
+    <div class="row" style="margin-bottom: 12px;">
+      <label>MIDI <input type="file" id="midi-upload" accept=".mid,.midi,.kar"></label>
+      <label>SoundFont <input type="file" id="sf-upload" accept=".sf2,.sf3,.sfogg,.dls"></label>
+      <button id="sf-default-btn">🌐 デフォルト SF (GeneralUser GS)</button>
+    </div>
+
+    <div class="row">
+      <button id="play-btn" class="primary" disabled>▶ 再生</button>
+      <button id="pause-btn" disabled>⏸ 一時停止</button>
+      <button id="stop-btn" class="danger" disabled>■ 停止</button>
+      <label>
+        音量
+        <input type="range" id="vol-slider" min="0" max="200" value="100" step="1">
+        <span class="val" id="vol-val">100%</span>
+      </label>
+      <label>
+        テンポ
+        <input type="range" id="tempo-slider" min="25" max="300" value="100" step="1">
+        <span class="val" id="tempo-val">100%</span>
+      </label>
+    </div>
+  </div>
+
+  <!-- ─── 再生進捗 & 鍵盤 ─── -->
+  <div class="panel">
+    <div id="status-bar" style="margin-bottom: 10px;">
+      <div id="status-dot"></div>
+      <span id="status-msg">SoundFont または MIDI ファイルを選択してください</span>
+    </div>
+
+    <div id="seek-wrap" style="margin-bottom: 12px;">
+      <input type="range" id="seek-bar" min="0" max="1000" value="0">
+      <div id="time-label">0:00 / 0:00</div>
+    </div>
+
+    <div id="piano-container"></div>
+    <div id="speaker-info">
+      <span>◀ L (Note 21: A0)</span>
+      <span>Center (Note 60: C4)</span>
+      <span>R (Note 108: C8) ▶</span>
+    </div>
+
+    <div id="ch-legend" style="margin-top: 12px;"></div>
   </div>
 </div>
-
-<!-- ─── チャンネル凡例 ─── -->
-<div id="ch-legend"></div>
 
 <!-- ─── ローディング ─── -->
 <div id="sf-loader">
@@ -312,7 +469,7 @@
 import { WorkletSynthesizer, Sequencer } from 'spessasynth_lib';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  定数
+//  定数 & 色
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const CH_COLORS = [
   '#4da3ff','#30a46c','#f5a524','#e5484d',
@@ -321,10 +478,40 @@ const CH_COLORS = [
   '#ec4899','#8b5cf6','#14b8a6','#f97316',
 ];
 
+const PRESETS = {
+  desktop:  { dist: 52, depth: 50, offsetX: 0, toein: 15 },
+  triangle: { dist: 90, depth: 90, offsetX: 0, toein: 30 },
+  piano:    { dist: 123, depth: 45, offsetX: 0, toein: 10 },
+  living:   { dist: 180, depth: 220, offsetX: 0, toein: 20 },
+};
+
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  DOM
+//  状態 (cm単位)
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let speakerDistCm = 52.0;   // 左右スピーカー間隔 (cm)
+let listenerDepthCm = 50.0; // リスナー距離 (cm)
+let listenerOffsetX = 0.0;  // リスナー左右オフセット (cm)
+let toeInDeg = 15.0;        // 内振り角 (度)
+let spatialMode = 'hrtf';   // 'hrtf' | 'direct'
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  DOM 要素
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const $ = id => document.getElementById(id);
+const stageCanvas = $('stage-canvas');
+const stageContainer = $('stage-canvas-container');
+const ctx2d = stageCanvas.getContext('2d');
+
+const spkDistSlider = $('spk-dist-slider');
+const spkDistNum    = $('spk-dist-num');
+const listDepthSlider = $('list-depth-slider');
+const listDepthNum    = $('list-depth-num');
+const listXSlider   = $('list-x-slider');
+const listXNum      = $('list-x-num');
+const toeinSlider   = $('toein-slider');
+const toeinNum      = $('toein-num');
+const spatialModeSel = $('spatial-mode');
+
 const playBtn     = $('play-btn');
 const pauseBtn    = $('pause-btn');
 const stopBtn     = $('stop-btn');
@@ -343,22 +530,32 @@ const container   = $('piano-container');
 const legend      = $('ch-legend');
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  状態
+//  Web Audio グラフ状態
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 let audioCtx    = null;
 let synth       = null;
 let sequencer   = null;
 let masterGain  = null;
-let sfBuffer    = null;      // SoundFont ArrayBuffer
-let midiBuffer  = null;      // MIDI ArrayBuffer
+let splitter    = null;
+let pannerL     = null;
+let pannerR     = null;
+let directPanL  = null;
+let directPanR  = null;
+
+let sfBuffer    = null;
+let midiBuffer  = null;
 let midiFileName = '';
 let currentDuration = 0;
 let isPlaying   = false;
 let isPaused    = false;
 let seekTimer   = null;
 
-// note -> Set<channel> (アクティブノート追跡)
+// アクティブノート追跡
 const activeNotes = new Map();
+
+// 音波アニメーション用パルス
+const pulsesL = [];
+const pulsesR = [];
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  ステータス表示
@@ -372,7 +569,6 @@ function setStatus(msg, kind = '') {
 //  88 鍵盤 UI 生成
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const keysMap = new Map();
-
 (function buildPiano() {
   const totalWhite = 52;
   const wPct = 100 / totalWhite;
@@ -423,6 +619,11 @@ function noteOn(note, ch) {
   activeNotes.get(note).add(ch);
   refreshKey(note);
   chChips[ch]?.classList.add('active');
+
+  // 音波パルス生成
+  const norm = (note - 21) / (108 - 21); // 0 (左端) 〜 1 (右端)
+  if (norm < 0.6) pulsesL.push({ r: 0, alpha: 0.8 * (1 - norm * 0.7), color: CH_COLORS[ch] });
+  if (norm > 0.4) pulsesR.push({ r: 0, alpha: 0.8 * (norm * 0.7 + 0.3), color: CH_COLORS[ch] });
 }
 
 function noteOff(note, ch) {
@@ -452,11 +653,360 @@ function allNotesOff() {
   activeNotes.clear();
   for (let m = 21; m <= 108; m++) {
     const el = keysMap.get(m);
-    if (el) {
-      for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
-    }
+    if (el) for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
   }
   chChips.forEach(c => c.classList.remove('active'));
+}
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  2D Canvas 俯瞰シミュレーター描画
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+let canvasW = 0, canvasH = 0;
+function resizeCanvas() {
+  const rect = stageContainer.getBoundingClientRect();
+  canvasW = rect.width;
+  canvasH = rect.height;
+  stageCanvas.width = canvasW * window.devicePixelRatio;
+  stageCanvas.height = canvasH * window.devicePixelRatio;
+  ctx2d.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+// cm -> Canvas 座標変換
+// 原点 (0, 0): スピーカー間の中央
+function cmToCanvas(xCm, depthCm) {
+  const maxSpanCm = Math.max(speakerDistCm, listenerDepthCm, 120) * 1.5;
+  const scale = Math.min((canvasW - 80) / maxSpanCm, (canvasH - 80) / maxSpanCm);
+  const cx = canvasW / 2;
+  const topY = 60; // スピーカーのベース Y
+  return {
+    x: cx + xCm * scale,
+    y: topY + depthCm * scale,
+    scale
+  };
+}
+
+function canvasToCm(px, py) {
+  const maxSpanCm = Math.max(speakerDistCm, listenerDepthCm, 120) * 1.5;
+  const scale = Math.min((canvasW - 80) / maxSpanCm, (canvasH - 80) / maxSpanCm);
+  const cx = canvasW / 2;
+  const topY = 60;
+  return {
+    xCm: (px - cx) / scale,
+    depthCm: (py - topY) / scale
+  };
+}
+
+// インタラクティブドラッグ対象
+let dragTarget = null; // 'spkL' | 'spkR' | 'listener'
+let dragStartPos = null;
+
+function renderStage() {
+  ctx2d.clearRect(0, 0, canvasW, canvasH);
+
+  // 1. グリッド描画 (10cm 単位)
+  const origin = cmToCanvas(0, 0);
+  const scale = origin.scale;
+
+  ctx2d.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx2d.lineWidth = 1;
+  const gridStep = 10 * scale; // 10cm ごと
+  for (let x = origin.x % gridStep; x < canvasW; x += gridStep) {
+    ctx2d.beginPath(); ctx2d.moveTo(x, 0); ctx2d.lineTo(x, canvasH); ctx2d.stroke();
+  }
+  for (let y = origin.y % gridStep; y < canvasH; y += gridStep) {
+    ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(canvasW, y); ctx2d.stroke();
+  }
+
+  // 2. 座標計算
+  const spkL_pos = cmToCanvas(-speakerDistCm / 2, 0);
+  const spkR_pos = cmToCanvas(+speakerDistCm / 2, 0);
+  const listener_pos = cmToCanvas(listenerOffsetX, listenerDepthCm);
+
+  // 3. スピーカー間の寸法線
+  ctx2d.strokeStyle = 'rgba(77,163,255,0.4)';
+  ctx2d.lineWidth = 1;
+  ctx2d.setLineDash([3, 3]);
+  ctx2d.beginPath();
+  ctx2d.moveTo(spkL_pos.x, spkL_pos.y - 25);
+  ctx2d.lineTo(spkR_pos.x, spkR_pos.y - 25);
+  ctx2d.stroke();
+  ctx2d.setLineDash([]);
+
+  ctx2d.fillStyle = '#4da3ff';
+  ctx2d.font = '11px system-ui';
+  ctx2d.textAlign = 'center';
+  ctx2d.fillText(`間隔: ${speakerDistCm.toFixed(1)} cm`, (spkL_pos.x + spkR_pos.x) / 2, spkL_pos.y - 30);
+
+  // 4. スピーカーからリスナーへの距離線
+  const distL = Math.hypot(listenerOffsetX - (-speakerDistCm/2), listenerDepthCm);
+  const distR = Math.hypot(listenerOffsetX - (+speakerDistCm/2), listenerDepthCm);
+
+  ctx2d.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx2d.beginPath();
+  ctx2d.moveTo(spkL_pos.x, spkL_pos.y);
+  ctx2d.lineTo(listener_pos.x, listener_pos.y);
+  ctx2d.moveTo(spkR_pos.x, spkR_pos.y);
+  ctx2d.lineTo(listener_pos.x, listener_pos.y);
+  ctx2d.stroke();
+
+  // 距離ラベル
+  ctx2d.fillStyle = '#9ca3af';
+  ctx2d.font = '10px monospace';
+  ctx2d.fillText(`${distL.toFixed(1)} cm`, (spkL_pos.x + listener_pos.x) / 2 - 25, (spkL_pos.y + listener_pos.y) / 2);
+  ctx2d.fillText(`${distR.toFixed(1)} cm`, (spkR_pos.x + listener_pos.x) / 2 + 25, (spkR_pos.y + listener_pos.y) / 2);
+
+  // 5. 音波パルス描画
+  function drawPulses(list, spkPos) {
+    for (let i = list.length - 1; i >= 0; i--) {
+      const p = list[i];
+      p.r += 1.8;
+      p.alpha -= 0.012;
+      if (p.alpha <= 0) { list.splice(i, 1); continue; }
+      ctx2d.strokeStyle = p.color;
+      ctx2d.globalAlpha = p.alpha;
+      ctx2d.lineWidth = 2;
+      ctx2d.beginPath();
+      ctx2d.arc(spkPos.x, spkPos.y, p.r, 0, Math.PI * 2);
+      ctx2d.stroke();
+    }
+    ctx2d.globalAlpha = 1;
+  }
+  drawPulses(pulsesL, spkL_pos);
+  drawPulses(pulsesR, spkR_pos);
+
+  // 6. スピーカー描画 (L / R)
+  function drawSpeaker(pos, angleRad, color, label) {
+    ctx2d.save();
+    ctx2d.translate(pos.x, pos.y);
+    ctx2d.rotate(angleRad);
+
+    // スピーカー箱
+    ctx2d.fillStyle = '#1c1f2b';
+    ctx2d.strokeStyle = color;
+    ctx2d.lineWidth = 2;
+    ctx2d.beginPath();
+    ctx2d.roundRect(-16, -12, 32, 24, 4);
+    ctx2d.fill();
+    ctx2d.stroke();
+
+    // コーン指向角
+    ctx2d.fillStyle = 'rgba(255,255,255,0.06)';
+    ctx2d.beginPath();
+    ctx2d.moveTo(0, 0);
+    ctx2d.arc(0, 0, 45, Math.PI/2 - 0.5, Math.PI/2 + 0.5);
+    ctx2d.closePath();
+    ctx2d.fill();
+
+    // ウーファー
+    ctx2d.fillStyle = color;
+    ctx2d.beginPath();
+    ctx2d.arc(0, 2, 7, 0, Math.PI * 2);
+    ctx2d.fill();
+
+    ctx2d.restore();
+
+    // ラベル
+    ctx2d.fillStyle = color;
+    ctx2d.font = 'bold 11px system-ui';
+    ctx2d.textAlign = 'center';
+    ctx2d.fillText(label, pos.x, pos.y + 26);
+  }
+
+  const radToe = (toeInDeg * Math.PI) / 180;
+  drawSpeaker(spkL_pos, -radToe, '#3b82f6', '🔊 L (Left)');
+  drawSpeaker(spkR_pos, +radToe, '#ec4899', '🔊 R (Right)');
+
+  // 7. リスナー描画 (頭 + 耳)
+  ctx2d.save();
+  ctx2d.translate(listener_pos.x, listener_pos.y);
+
+  // 頭
+  ctx2d.fillStyle = '#10b981';
+  ctx2d.beginPath();
+  ctx2d.arc(0, 0, 14, 0, Math.PI * 2);
+  ctx2d.fill();
+
+  // 左右の耳
+  ctx2d.fillStyle = '#34d399';
+  ctx2d.beginPath();
+  ctx2d.ellipse(-16, 0, 3, 6, 0, 0, Math.PI * 2);
+  ctx2d.ellipse(+16, 0, 3, 6, 0, 0, Math.PI * 2);
+  ctx2d.fill();
+
+  // 鼻 (前方を向く)
+  ctx2d.fillStyle = '#059669';
+  ctx2d.beginPath();
+  ctx2d.moveTo(-4, -12);
+  ctx2d.lineTo(0, -20);
+  ctx2d.lineTo(4, -12);
+  ctx2d.closePath();
+  ctx2d.fill();
+
+  ctx2d.restore();
+
+  ctx2d.fillStyle = '#10b981';
+  ctx2d.font = 'bold 11px system-ui';
+  ctx2d.textAlign = 'center';
+  ctx2d.fillText(`👤 リスナー (${listenerDepthCm.toFixed(1)} cm)`, listener_pos.x, listener_pos.y + 28);
+
+  requestAnimationFrame(renderStage);
+}
+requestAnimationFrame(renderStage);
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  ドラッグ操作
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function getEventPos(e) {
+  const rect = stageCanvas.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top
+  };
+}
+
+stageCanvas.addEventListener('pointerdown', e => {
+  const { x, y } = getEventPos(e);
+  const spkL_pos = cmToCanvas(-speakerDistCm / 2, 0);
+  const spkR_pos = cmToCanvas(+speakerDistCm / 2, 0);
+  const list_pos = cmToCanvas(listenerOffsetX, listenerDepthCm);
+
+  if (Math.hypot(x - spkL_pos.x, y - spkL_pos.y) < 25) {
+    dragTarget = 'spkL';
+  } else if (Math.hypot(x - spkR_pos.x, y - spkR_pos.y) < 25) {
+    dragTarget = 'spkR';
+  } else if (Math.hypot(x - list_pos.x, y - list_pos.y) < 25) {
+    dragTarget = 'listener';
+  }
+  if (dragTarget) {
+    stageCanvas.setPointerCapture(e.pointerId);
+  }
+});
+
+stageCanvas.addEventListener('pointermove', e => {
+  if (!dragTarget) return;
+  const { x, y } = getEventPos(e);
+  const { xCm, depthCm } = canvasToCm(x, y);
+
+  if (dragTarget === 'spkL') {
+    const newDist = Math.max(15, Math.min(300, Math.abs(xCm) * 2));
+    updateParams({ dist: newDist });
+  } else if (dragTarget === 'spkR') {
+    const newDist = Math.max(15, Math.min(300, Math.abs(xCm) * 2));
+    updateParams({ dist: newDist });
+  } else if (dragTarget === 'listener') {
+    const newDepth = Math.max(15, Math.min(300, depthCm));
+    const newOffset = Math.max(-100, Math.min(100, xCm));
+    updateParams({ depth: newDepth, offsetX: newOffset });
+  }
+});
+
+stageCanvas.addEventListener('pointerup', e => {
+  dragTarget = null;
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  パラメータ更新 & 同期
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function updateParams({ dist, depth, offsetX, toein, mode }) {
+  if (dist !== undefined) {
+    speakerDistCm = dist;
+    spkDistSlider.value = dist;
+    spkDistNum.value = dist;
+  }
+  if (depth !== undefined) {
+    listenerDepthCm = depth;
+    listDepthSlider.value = depth;
+    listDepthNum.value = depth;
+  }
+  if (offsetX !== undefined) {
+    listenerOffsetX = offsetX;
+    listXSlider.value = offsetX;
+    listXNum.value = offsetX;
+  }
+  if (toein !== undefined) {
+    toeInDeg = toein;
+    toeinSlider.value = toein;
+    toeinNum.value = toein;
+  }
+  if (mode !== undefined) {
+    spatialMode = mode;
+    spatialModeSel.value = mode;
+  }
+  applyAcousticSimulation();
+}
+
+// スライダー & 入力ボックス連動
+spkDistSlider.addEventListener('input', e => updateParams({ dist: parseFloat(e.target.value) }));
+spkDistNum.addEventListener('change', e => updateParams({ dist: parseFloat(e.target.value) }));
+listDepthSlider.addEventListener('input', e => updateParams({ depth: parseFloat(e.target.value) }));
+listDepthNum.addEventListener('change', e => updateParams({ depth: parseFloat(e.target.value) }));
+listXSlider.addEventListener('input', e => updateParams({ offsetX: parseFloat(e.target.value) }));
+listXNum.addEventListener('change', e => updateParams({ offsetX: parseFloat(e.target.value) }));
+toeinSlider.addEventListener('input', e => updateParams({ toein: parseFloat(e.target.value) }));
+toeinNum.addEventListener('change', e => updateParams({ toein: parseFloat(e.target.value) }));
+spatialModeSel.addEventListener('change', e => updateParams({ mode: e.target.value }));
+
+// プリセットボタン
+document.querySelectorAll('.preset-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const p = PRESETS[btn.dataset.preset];
+    if (p) updateParams(p);
+  });
+});
+
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+//  Web Audio 音響シミュレーション適用
+// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+function applyAcousticSimulation() {
+  if (!audioCtx || !pannerL || !pannerR) return;
+
+  const spkLx_m = (-speakerDistCm / 2) / 100;
+  const spkRx_m = (+speakerDistCm / 2) / 100;
+  const depth_m = listenerDepthCm / 100;
+  const offset_m = listenerOffsetX / 100;
+
+  // 1. HRTF 3D Panner モード
+  if (spatialMode === 'hrtf') {
+    // リスナーの位置: (offset_m, 0, depth_m)
+    // スピーカーの位置: L = (spkLx_m, 0, 0), R = (spkRx_m, 0, 0)
+    // 相対座標で設定
+    const relLx = spkLx_m - offset_m;
+    const relRx = spkRx_m - offset_m;
+    const relZ  = -depth_m; // 前方 (負のZ)
+
+    const now = audioCtx.currentTime;
+    pannerL.positionX.setTargetAtTime(relLx, now, 0.05);
+    pannerL.positionY.setTargetAtTime(0, now, 0.05);
+    pannerL.positionZ.setTargetAtTime(relZ, now, 0.05);
+
+    pannerR.positionX.setTargetAtTime(relRx, now, 0.05);
+    pannerR.positionY.setTargetAtTime(0, now, 0.05);
+    pannerR.positionZ.setTargetAtTime(relZ, now, 0.05);
+
+    // 指向性 (Toe-in 内振り角)
+    const radToe = (toeInDeg * Math.PI) / 180;
+    pannerL.orientationX.setTargetAtTime(Math.sin(radToe), now, 0.05);
+    pannerL.orientationZ.setTargetAtTime(Math.cos(radToe), now, 0.05);
+    pannerR.orientationX.setTargetAtTime(Math.sin(-radToe), now, 0.05);
+    pannerR.orientationZ.setTargetAtTime(Math.cos(-radToe), now, 0.05);
+
+    pannerL.panningModel = 'HRTF';
+    pannerR.panningModel = 'HRTF';
+  } else {
+    // 2. ダイレクト・ステレオパン
+    pannerL.panningModel = 'equalpower';
+    pannerR.panningModel = 'equalpower';
+    const panL = Math.max(-1, Math.min(1, (-speakerDistCm / 2 - listenerOffsetX) / 100));
+    const panR = Math.max(-1, Math.min(1, (+speakerDistCm / 2 - listenerOffsetX) / 100));
+    pannerL.positionX.setTargetAtTime(panL, audioCtx.currentTime, 0.05);
+    pannerR.positionX.setTargetAtTime(panR, audioCtx.currentTime, 0.05);
+    pannerL.positionZ.setTargetAtTime(-1, audioCtx.currentTime, 0.05);
+    pannerR.positionZ.setTargetAtTime(-1, audioCtx.currentTime, 0.05);
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -469,12 +1019,45 @@ async function initAudio() {
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
 
+  // リスナー初期化 (前方向き)
+  if (audioCtx.listener.forwardX) {
+    audioCtx.listener.forwardX.value = 0;
+    audioCtx.listener.forwardY.value = 0;
+    audioCtx.listener.forwardZ.value = -1;
+    audioCtx.listener.upX.value = 0;
+    audioCtx.listener.upY.value = 1;
+    audioCtx.listener.upZ.value = 0;
+  }
+
   // SpessaSynth AudioWorklet プロセッサを登録
   await audioCtx.audioWorklet.addModule(
     'https://cdn.jsdelivr.net/npm/spessasynth_lib@4/dist/spessasynth_processor.min.js'
   );
 
   synth = new WorkletSynthesizer(audioCtx);
+
+  // 左右スピーカー用の 3D PannerNode (HRTF)
+  pannerL = audioCtx.createPanner();
+  pannerR = audioCtx.createPanner();
+
+  [pannerL, pannerR].forEach(p => {
+    p.panningModel = 'HRTF';
+    p.distanceModel = 'inverse';
+    p.refDistance = 0.5;      // 50cm を基準距離
+    p.maxDistance = 10000;
+    p.rolloffFactor = 1.0;
+    p.coneInnerAngle = 90;    // スピーカーの指向角
+    p.coneOuterAngle = 180;
+    p.coneOuterGain = 0.4;
+  });
+
+  // チャンネルスプリッター: synth の stereo 出力を L / R に分離
+  splitter = audioCtx.createChannelSplitter(2);
+  synth.connect(splitter);
+
+  // Lチャンネル -> pannerL, Rチャンネル -> pannerR
+  splitter.connect(pannerL, 0);
+  splitter.connect(pannerR, 1);
 
   // マスターゲイン & コンプレッサー（音割れ防止）
   masterGain = audioCtx.createGain();
@@ -487,9 +1070,13 @@ async function initAudio() {
   compressor.attack.value = 0.003;
   compressor.release.value = 0.15;
 
-  synth.connect(masterGain);
+  pannerL.connect(masterGain);
+  pannerR.connect(masterGain);
   masterGain.connect(compressor);
   compressor.connect(audioCtx.destination);
+
+  // 音響シミュレーション位置を反映
+  applyAcousticSimulation();
 
   // 音量スライダー連動
   volSlider.addEventListener('input', () => {
@@ -528,7 +1115,7 @@ async function initAudio() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SoundFont 読み込み（ファイル）
+//  SoundFont 読み込み (ファイル)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 $('sf-upload').addEventListener('change', async e => {
   const file = e.target.files[0];
@@ -551,7 +1138,7 @@ $('sf-upload').addEventListener('change', async e => {
 });
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SoundFont 読み込み（デフォルト / CORS 対応 GitHub Raw）
+//  SoundFont 読み込み (デフォルト)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 $('sf-default-btn').addEventListener('click', async () => {
   const SF_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2';
@@ -588,7 +1175,6 @@ $('midi-upload').addEventListener('change', async e => {
     seekBar.value = 0;
     timeLabel.textContent = '0:00 / --:--';
 
-    // すでにシーケンサーがあれば曲情報をプリロード
     if (sequencer) {
       sequencer.loadNewSongList([{ binary: midiBuffer, fileName: midiFileName }]);
       if (sequencer.duration > 0) {
@@ -609,7 +1195,7 @@ function updatePlayBtn() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  再生
+//  再生 / 一時停止 / 停止
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 playBtn.addEventListener('click', async () => {
   if (!sfBuffer || !midiBuffer) return;
@@ -651,9 +1237,6 @@ playBtn.addEventListener('click', async () => {
   startSeekUpdate();
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  一時停止
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 pauseBtn.addEventListener('click', () => {
   if (!sequencer || !isPlaying) return;
   sequencer.pause();
@@ -666,9 +1249,6 @@ pauseBtn.addEventListener('click', () => {
   allNotesOff();
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  停止
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 stopBtn.addEventListener('click', () => {
   stopPlayback();
 });
@@ -691,7 +1271,7 @@ function stopPlayback() {
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  シークバー操作
+//  シークバー & テンポ
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 seekBar.addEventListener('input', () => {
   if (!sequencer || currentDuration <= 0) return;
@@ -726,20 +1306,12 @@ function stopSeekUpdate() {
   }
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  テンポスライダー
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 tempoSlider.addEventListener('input', () => {
   const rate = parseFloat(tempoSlider.value) / 100;
   tempoVal.textContent = `${tempoSlider.value}%`;
-  if (sequencer) {
-    sequencer.playbackRate = rate;
-  }
+  if (sequencer) sequencer.playbackRate = rate;
 });
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ユーティリティ
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function formatTime(sec) {
   if (!isFinite(sec) || sec <= 0) return '0:00';
   const s = Math.floor(sec);
