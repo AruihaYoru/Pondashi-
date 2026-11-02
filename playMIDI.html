@@ -172,7 +172,7 @@
       z-index: 2;
       transition: background .04s;
     }
-    /* チャンネル別に色分け（10色ループ） */
+    /* チャンネル別に色分け（16色） */
     .active-0  { background: #4da3ff !important; }
     .active-1  { background: #30a46c !important; }
     .active-2  { background: #f5a524 !important; }
@@ -214,7 +214,7 @@
       align-items: center;
       gap: 4px;
       color: var(--sub);
-      opacity: 0;
+      opacity: 0.35;
       transition: opacity .2s;
     }
     .ch-chip.active { opacity: 1; }
@@ -256,22 +256,15 @@
   <label>SoundFont (SF2/SF3)
     <input type="file" id="sf-upload" accept=".sf2,.sf3,.sfogg,.dls">
   </label>
-  <button id="sf-default-btn">🌐 デフォルト SF を使う</button>
+  <button id="sf-default-btn">🌐 デフォルト SF を使う (GeneralUser GS)</button>
 </div>
 
 <!-- ─── 再生コントロール ─── -->
 <div class="panel">
   <span class="panel-title">再生</span>
-  <button id="play-btn"  class="primary" disabled>▶ 再生</button>
+  <button id="play-btn" class="primary" disabled>▶ 再生</button>
   <button id="pause-btn" disabled>⏸ 一時停止</button>
-  <button id="stop-btn"  class="danger" disabled>■ 停止</button>
-  <label>
-    定位モード
-    <select id="pan-mode">
-      <option value="stereo">StereoPanner（強度パン）</option>
-      <option value="3d">Panner3D・HRTF（52cm 実寸空間）</option>
-    </select>
-  </label>
+  <button id="stop-btn" class="danger" disabled>■ 停止</button>
   <label>
     音量
     <input type="range" id="vol-slider" min="0" max="200" value="100" step="1">
@@ -287,7 +280,7 @@
 <!-- ─── ステータス ─── -->
 <div id="status-bar">
   <div id="status-dot"></div>
-  <span id="status-msg">SoundFont を読み込んでください</span>
+  <span id="status-msg">SoundFont または MIDI ファイルを選択してください</span>
 </div>
 
 <!-- ─── シークバー ─── -->
@@ -312,20 +305,15 @@
 <!-- ─── ローディング ─── -->
 <div id="sf-loader">
   <div class="spinner"></div>
-  <p id="sf-loader-msg">SoundFont を読み込み中…</p>
+  <p id="sf-loader-msg">読み込み中…</p>
 </div>
 
 <script type="module">
-import { WorkletSynthesizer, SpessaSynthSequencer, BasicMIDI }
-  from 'spessasynth_lib';
+import { WorkletSynthesizer, Sequencer } from 'spessasynth_lib';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  定数
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const PHYSICAL_WIDTH = 0.52;   // 52cm スピーカー幅
-const HALF_WIDTH     = PHYSICAL_WIDTH / 2;
-const LISTENER_Z     = 0.50;
-
 const CH_COLORS = [
   '#4da3ff','#30a46c','#f5a524','#e5484d',
   '#d6409f','#6e56cf','#12a594','#f76b15',
@@ -337,35 +325,39 @@ const CH_COLORS = [
 //  DOM
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const $ = id => document.getElementById(id);
-const playBtn   = $('play-btn');
-const pauseBtn  = $('pause-btn');
-const stopBtn   = $('stop-btn');
-const volSlider = $('vol-slider');
-const volVal    = $('vol-val');
+const playBtn     = $('play-btn');
+const pauseBtn    = $('pause-btn');
+const stopBtn     = $('stop-btn');
+const volSlider   = $('vol-slider');
+const volVal      = $('vol-val');
 const tempoSlider = $('tempo-slider');
 const tempoVal    = $('tempo-val');
-const seekBar   = $('seek-bar');
-const timeLabel = $('time-label');
-const seekWrap  = $('seek-wrap');
-const statusDot = $('status-dot');
-const statusMsg = $('status-msg');
-const sfLoader  = $('sf-loader');
+const seekBar     = $('seek-bar');
+const timeLabel   = $('time-label');
+const seekWrap    = $('seek-wrap');
+const statusDot   = $('status-dot');
+const statusMsg   = $('status-msg');
+const sfLoader    = $('sf-loader');
 const sfLoaderMsg = $('sf-loader-msg');
-const container = $('piano-container');
-const legend    = $('ch-legend');
+const container   = $('piano-container');
+const legend      = $('ch-legend');
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  状態
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let audioCtx  = null;
-let synth     = null;
-let sequencer = null;
-let sfBuffer  = null;      // 読み込み済みの SF バイト列
-let midiParsed = null;     // BasicMIDI オブジェクト
-let isPlaying = false;
-let isPaused  = false;
-let seekTimer = null;
-// note → Set<ch> (同時押し追跡)
+let audioCtx    = null;
+let synth       = null;
+let sequencer   = null;
+let masterGain  = null;
+let sfBuffer    = null;      // SoundFont ArrayBuffer
+let midiBuffer  = null;      // MIDI ArrayBuffer
+let midiFileName = '';
+let currentDuration = 0;
+let isPlaying   = false;
+let isPaused    = false;
+let seekTimer   = null;
+
+// note -> Set<channel> (アクティブノート追跡)
 const activeNotes = new Map();
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -429,85 +421,63 @@ function noteOn(note, ch) {
   if (note < 21 || note > 108) return;
   if (!activeNotes.has(note)) activeNotes.set(note, new Set());
   activeNotes.get(note).add(ch);
-  const el = keysMap.get(note);
-  if (!el) return;
-  // すべての active-* クラスを除去して最高優先度 ch を適用
   refreshKey(note);
   chChips[ch]?.classList.add('active');
 }
+
 function noteOff(note, ch) {
   if (note < 21 || note > 108) return;
   const s = activeNotes.get(note);
-  if (s) { s.delete(ch); if (s.size === 0) activeNotes.delete(note); }
+  if (s) {
+    s.delete(ch);
+    if (s.size === 0) activeNotes.delete(note);
+  }
   refreshKey(note);
-  // ch を使っているノートが他にあるかチェック
-  const chStillActive = [...activeNotes.values()].some(s => s.has(ch));
+  const chStillActive = [...activeNotes.values()].some(st => st.has(ch));
   if (!chStillActive) chChips[ch]?.classList.remove('active');
 }
+
 function refreshKey(note) {
   const el = keysMap.get(note);
   if (!el) return;
-  // 既存の active クラスを全解除
   for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
   const s = activeNotes.get(note);
   if (s && s.size > 0) {
-    const ch = s.values().next().value; // 最初の ch
+    const ch = s.values().next().value;
     el.classList.add(`active-${ch}`);
   }
 }
+
 function allNotesOff() {
   activeNotes.clear();
   for (let m = 21; m <= 108; m++) {
     const el = keysMap.get(m);
-    if (el) for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
+    if (el) {
+      for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
+    }
   }
   chChips.forEach(c => c.classList.remove('active'));
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  パンニングノード生成（1 note 用）
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function makePanner(note) {
-  const norm = (note - 21) / (108 - 21);
-  const mode = $('pan-mode').value;
-  if (mode === '3d') {
-    const panner = audioCtx.createPanner();
-    panner.panningModel  = 'HRTF';
-    panner.distanceModel = 'inverse';
-    const x = -HALF_WIDTH + norm * PHYSICAL_WIDTH;
-    panner.positionX.setValueAtTime(x, audioCtx.currentTime);
-    panner.positionY.setValueAtTime(0, audioCtx.currentTime);
-    panner.positionZ.setValueAtTime(-LISTENER_Z, audioCtx.currentTime);
-    return panner;
-  } else {
-    const panner = audioCtx.createStereoPanner();
-    panner.pan.setValueAtTime(norm * 2 - 1, audioCtx.currentTime);
-    return panner;
-  }
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  AudioContext + SpessaSynth 初期化
-//  (ユーザー操作後に呼ぶ)
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 async function initAudio() {
-  if (synth) return; // 既存
-
-  audioCtx = new AudioContext({ latencyHint: 'interactive' });
+  if (synth) return;
 
   setStatus('AudioWorklet を初期化中…', 'warn');
 
-  // SpessaSynth processor を CDN から追加
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+
+  // SpessaSynth AudioWorklet プロセッサを登録
   await audioCtx.audioWorklet.addModule(
     'https://cdn.jsdelivr.net/npm/spessasynth_lib@4/dist/spessasynth_processor.min.js'
   );
 
   synth = new WorkletSynthesizer(audioCtx);
 
-  // --- パンニングのため synth 出力を各ノートに分けるには、
-  //     SpessaSynth は出力を audioCtx.destination に直結させる仕様のため
-  //     マスターゲイン → コンプレッサー → destination の簡潔な構成を使用
-  const masterGain = audioCtx.createGain();
+  // マスターゲイン & コンプレッサー（音割れ防止）
+  masterGain = audioCtx.createGain();
   masterGain.gain.value = parseFloat(volSlider.value) / 100;
 
   const compressor = audioCtx.createDynamicsCompressor();
@@ -521,25 +491,39 @@ async function initAudio() {
   masterGain.connect(compressor);
   compressor.connect(audioCtx.destination);
 
-  // 音量スライダーを masterGain に接続
+  // 音量スライダー連動
   volSlider.addEventListener('input', () => {
     const v = parseFloat(volSlider.value) / 100;
     volVal.textContent = `${volSlider.value}%`;
-    masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.05);
+    if (masterGain && audioCtx) {
+      masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.03);
+    }
   });
 
-  // SoundFont をロード
-  setStatus('SoundFont をシンセに転送中…', 'warn');
-  await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
-  await synth.isReady;
-  setStatus('SoundFont 読み込み完了。MIDIファイルを選択してください', 'ok');
+  // SoundFont のロード
+  if (sfBuffer) {
+    setStatus('SoundFont をシンセに転送中…', 'warn');
+    await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
+    await synth.isReady;
+  }
 
-  // noteOn / noteOff イベントで鍵盤ビジュアル更新
-  synth.eventHandler.addEvent('noteOn', e => {
+  // 鍵盤ビジュアル用イベント
+  synth.eventHandler.addEvent('noteOn', 'piano-visual-on', e => {
     noteOn(e.midiNote, e.channel);
   });
-  synth.eventHandler.addEvent('noteOff', e => {
+  synth.eventHandler.addEvent('noteOff', 'piano-visual-off', e => {
     noteOff(e.midiNote, e.channel);
+  });
+
+  // シーケンサー初期化
+  sequencer = new Sequencer(synth);
+
+  sequencer.eventHandler.addEvent('songChange', 'seq-song-change', e => {
+    if (sequencer.duration > 0) {
+      currentDuration = sequencer.duration;
+      timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
+      setStatus(`再生準備完了: ${midiFileName || 'MIDI'} (${formatTime(currentDuration)})`, 'ok');
+    }
   });
 }
 
@@ -553,14 +537,13 @@ $('sf-upload').addEventListener('change', async e => {
   sfLoader.classList.add('show');
   try {
     sfBuffer = await file.arrayBuffer();
-    setStatus(`SF: ${file.name} — 再生ボタンを押してください`, 'ok');
-    // synth が既に存在する場合はサウンドフォントを差し替え
     if (synth) {
       await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
       await synth.isReady;
     }
+    setStatus(`SF 読込完了: ${file.name}`, 'ok');
     updatePlayBtn();
-  } catch(err) {
+  } catch (err) {
     setStatus('SoundFont 読み込みエラー: ' + err.message, 'err');
   } finally {
     sfLoader.classList.remove('show');
@@ -568,12 +551,11 @@ $('sf-upload').addEventListener('change', async e => {
 });
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SoundFont 読み込み（デフォルト / ネット）
+//  SoundFont 読み込み（デフォルト / CORS 対応 GitHub Raw）
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 $('sf-default-btn').addEventListener('click', async () => {
-  // GeneralUser GS (約 30MB SF2 ファイル – Internet Archive)
-  const SF_URL = 'https://archive.org/download/free-soundfonts-sf2-2019-04/GeneralUser%20GS%20v1.471.sf2';
-  sfLoaderMsg.textContent = 'GeneralUser GS をダウンロード中… (初回のみ / ~30MB)';
+  const SF_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2';
+  sfLoaderMsg.textContent = 'GeneralUser GS をダウンロード中… (約30MB / 初回のみ)';
   sfLoader.classList.add('show');
   setStatus('デフォルト SoundFont をダウンロード中…', 'warn');
   try {
@@ -586,7 +568,7 @@ $('sf-default-btn').addEventListener('click', async () => {
     }
     setStatus('GeneralUser GS 読み込み完了', 'ok');
     updatePlayBtn();
-  } catch(err) {
+  } catch (err) {
     setStatus('ダウンロード失敗: ' + err.message + ' — ローカルファイルをお試しください', 'err');
   } finally {
     sfLoader.classList.remove('show');
@@ -600,35 +582,44 @@ $('midi-upload').addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
   try {
-    const buf = await file.arrayBuffer();
-    midiParsed = new BasicMIDI(new Uint8Array(buf));
-    setStatus(`MIDI: ${file.name} (${formatTime(midiParsed.duration)})`, sfBuffer ? 'ok' : 'warn');
+    midiBuffer = await file.arrayBuffer();
+    midiFileName = file.name;
     seekWrap.classList.add('visible');
     seekBar.value = 0;
-    timeLabel.textContent = `0:00 / ${formatTime(midiParsed.duration)}`;
+    timeLabel.textContent = '0:00 / --:--';
+
+    // すでにシーケンサーがあれば曲情報をプリロード
+    if (sequencer) {
+      sequencer.loadNewSongList([{ binary: midiBuffer, fileName: midiFileName }]);
+      if (sequencer.duration > 0) {
+        currentDuration = sequencer.duration;
+        timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
+      }
+    }
+
+    setStatus(`MIDI 読込完了: ${midiFileName}`, sfBuffer ? 'ok' : 'warn');
     updatePlayBtn();
-  } catch(err) {
+  } catch (err) {
     setStatus('MIDI 読み込みエラー: ' + err.message, 'err');
   }
 });
 
 function updatePlayBtn() {
-  playBtn.disabled = !(sfBuffer && midiParsed);
+  playBtn.disabled = !(sfBuffer && midiBuffer);
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  再生
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 playBtn.addEventListener('click', async () => {
-  if (!sfBuffer || !midiParsed) return;
+  if (!sfBuffer || !midiBuffer) return;
 
-  // 初回 or 停止後の初期化
   if (!synth) {
     sfLoaderMsg.textContent = 'シンセを初期化中…';
     sfLoader.classList.add('show');
     try {
       await initAudio();
-    } catch(err) {
+    } catch (err) {
       setStatus('初期化エラー: ' + err.message, 'err');
       sfLoader.classList.remove('show');
       return;
@@ -636,33 +627,26 @@ playBtn.addEventListener('click', async () => {
     sfLoader.classList.remove('show');
   }
 
-  if (audioCtx.state === 'suspended') await audioCtx.resume();
+  if (audioCtx.state === 'suspended') {
+    await audioCtx.resume();
+  }
 
   if (isPaused && sequencer) {
-    // 一時停止からの再開
     sequencer.play();
     isPaused = false;
   } else {
-    // 新規再生
-    if (sequencer) {
-      sequencer.stop?.();
-      sequencer = null;
-    }
     allNotesOff();
-
-    sequencer = new SpessaSynthSequencer(synth, midiParsed);
-    sequencer.play();
-
-    // テンポ適用
+    sequencer.loadNewSongList([{ binary: midiBuffer, fileName: midiFileName }]);
     sequencer.playbackRate = parseFloat(tempoSlider.value) / 100;
+    sequencer.play();
   }
 
   isPlaying = true;
-  isPaused  = false;
-  setStatus('再生中…', 'play');
-  playBtn.disabled  = true;
+  isPaused = false;
+  setStatus(`再生中: ${midiFileName}`, 'play');
+  playBtn.disabled = true;
   pauseBtn.disabled = false;
-  stopBtn.disabled  = false;
+  stopBtn.disabled = false;
 
   startSeekUpdate();
 });
@@ -671,17 +655,15 @@ playBtn.addEventListener('click', async () => {
 //  一時停止
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 pauseBtn.addEventListener('click', () => {
-  if (!sequencer) return;
-  if (!isPaused) {
-    sequencer.pause?.();
-    isPaused  = true;
-    isPlaying = false;
-    setStatus('一時停止', 'warn');
-    playBtn.disabled  = false;
-    pauseBtn.disabled = true;
-    stopSeekUpdate();
-    allNotesOff();
-  }
+  if (!sequencer || !isPlaying) return;
+  sequencer.pause();
+  isPlaying = false;
+  isPaused = true;
+  setStatus('一時停止中', 'warn');
+  playBtn.disabled = false;
+  pauseBtn.disabled = true;
+  stopSeekUpdate();
+  allNotesOff();
 });
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -693,67 +675,75 @@ stopBtn.addEventListener('click', () => {
 
 function stopPlayback() {
   if (sequencer) {
-    try { sequencer.stop?.(); } catch(_) {}
-    sequencer = null;
+    sequencer.pause();
+    sequencer.currentTime = 0;
   }
   allNotesOff();
   isPlaying = false;
-  isPaused  = false;
-  playBtn.disabled  = !(sfBuffer && midiParsed);
+  isPaused = false;
+  playBtn.disabled = !(sfBuffer && midiBuffer);
   pauseBtn.disabled = true;
-  stopBtn.disabled  = true;
-  setStatus(midiParsed
-    ? `MIDI: ${$('midi-upload').files[0]?.name ?? ''} — 停止`
-    : 'MIDI ファイルを選択してください', sfBuffer ? 'ok' : '');
+  stopBtn.disabled = true;
+  setStatus(midiFileName ? `停止: ${midiFileName}` : '停止中', sfBuffer ? 'ok' : '');
   seekBar.value = 0;
-  if (midiParsed) timeLabel.textContent = `0:00 / ${formatTime(midiParsed.duration)}`;
+  timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
   stopSeekUpdate();
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  シーク
+//  シークバー操作
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 seekBar.addEventListener('input', () => {
-  if (!sequencer || !midiParsed) return;
-  const t = (seekBar.value / 1000) * midiParsed.duration;
-  sequencer.currentTime = t;
-  timeLabel.textContent = `${formatTime(t)} / ${formatTime(midiParsed.duration)}`;
+  if (!sequencer || currentDuration <= 0) return;
+  const targetTime = (parseFloat(seekBar.value) / 1000) * currentDuration;
+  sequencer.currentTime = targetTime;
+  timeLabel.textContent = `${formatTime(targetTime)} / ${formatTime(currentDuration)}`;
   allNotesOff();
 });
 
 function startSeekUpdate() {
   stopSeekUpdate();
   seekTimer = setInterval(() => {
-    if (!sequencer || !midiParsed) return;
-    const t = sequencer.currentTime ?? 0;
-    const d = midiParsed.duration;
-    seekBar.value = Math.min(1000, (t / d) * 1000);
-    timeLabel.textContent = `${formatTime(t)} / ${formatTime(d)}`;
-    // 終了検知
-    if (t >= d - 0.1) {
-      stopPlayback();
+    if (!sequencer) return;
+    const curTime = sequencer.currentHighResolutionTime ?? sequencer.currentTime ?? 0;
+    const d = sequencer.duration || currentDuration;
+    if (d > 0) {
+      currentDuration = d;
+      seekBar.value = Math.min(1000, (curTime / d) * 1000);
+      timeLabel.textContent = `${formatTime(curTime)} / ${formatTime(d)}`;
+
+      if (curTime >= d - 0.1 || sequencer.isFinished) {
+        stopPlayback();
+      }
     }
-  }, 200);
+  }, 100);
 }
+
 function stopSeekUpdate() {
-  if (seekTimer) { clearInterval(seekTimer); seekTimer = null; }
+  if (seekTimer) {
+    clearInterval(seekTimer);
+    seekTimer = null;
+  }
 }
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  テンポ
+//  テンポスライダー
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 tempoSlider.addEventListener('input', () => {
+  const rate = parseFloat(tempoSlider.value) / 100;
   tempoVal.textContent = `${tempoSlider.value}%`;
-  if (sequencer) sequencer.playbackRate = parseFloat(tempoSlider.value) / 100;
+  if (sequencer) {
+    sequencer.playbackRate = rate;
+  }
 });
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  ユーティリティ
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 function formatTime(sec) {
-  if (!isFinite(sec)) return '?:??';
+  if (!isFinite(sec) || sec <= 0) return '0:00';
   const s = Math.floor(sec);
-  return `${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}`;
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }
 </script>
 </body>
