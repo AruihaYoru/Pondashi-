@@ -15,8 +15,8 @@
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: #0a0a0a;
-      color: #ddd;
+      background: #fff;
+      color: #000;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
       padding: 24px;
       display: flex;
@@ -31,22 +31,20 @@
     }
     h1 {
       font-size: 16px;
-      font-weight: 600;
-      letter-spacing: 0.05em;
-      color: #fff;
+      font-weight: 700;
+      color: #000;
     }
     .panel {
-      background: #111;
-      border: 1px solid #222;
-      border-radius: 4px;
+      background: #fff;
+      border: 1px solid #000;
       padding: 14px 16px;
     }
     .panel-header {
-      font-size: 11px;
-      font-weight: 600;
-      color: #666;
+      font-size: 12px;
+      font-weight: 700;
+      color: #000;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
@@ -60,16 +58,15 @@
     }
     label {
       font-size: 12px;
-      color: #888;
+      color: #000;
       display: flex;
       align-items: center;
       gap: 6px;
     }
     select, input[type=number], input[type=range] {
-      background: #000;
-      color: #ddd;
-      border: 1px solid #333;
-      border-radius: 3px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
       font: inherit;
       font-size: 12px;
     }
@@ -80,45 +77,44 @@
       text-align: right;
     }
     input[type=range] {
-      width: 100px;
-      accent-color: #888;
+      width: 110px;
+      accent-color: #000;
       cursor: pointer;
     }
     input[type=file] {
-      font-size: 11px;
-      color: #777;
+      font-size: 12px;
+      color: #000;
     }
     button {
-      background: #1a1a1a;
-      color: #eee;
-      border: 1px solid #333;
-      border-radius: 3px;
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
       padding: 5px 12px;
       font: inherit;
       font-size: 12px;
       cursor: pointer;
     }
     button:hover:not(:disabled) {
-      background: #252525;
-      border-color: #555;
+      background: #000;
+      color: #fff;
     }
     button:disabled {
-      opacity: 0.3;
+      opacity: 0.25;
       cursor: default;
     }
     button.btn-strong {
-      background: #eee;
-      color: #000;
-      border-color: #fff;
-      font-weight: 600;
+      background: #000;
+      color: #fff;
+      font-weight: 700;
     }
     button.btn-strong:hover:not(:disabled) {
       background: #fff;
+      color: #000;
     }
     .val-display {
-      font-size: 11px;
-      color: #aaa;
-      min-width: 38px;
+      font-size: 12px;
+      color: #000;
+      min-width: 44px;
       font-variant-numeric: tabular-nums;
     }
 
@@ -133,9 +129,8 @@
     #stage-wrap {
       width: 100%;
       height: 320px;
-      background: #050505;
-      border: 1px solid #222;
-      border-radius: 3px;
+      background: #fff;
+      border: 1px solid #000;
       position: relative;
       touch-action: none;
     }
@@ -166,7 +161,7 @@
     #seek-bar { width: 100%; }
     #time-display {
       font-size: 11px;
-      color: #666;
+      color: #000;
       text-align: right;
       font-variant-numeric: tabular-nums;
       margin-top: 2px;
@@ -175,37 +170,39 @@
     #piano-wrap {
       width: 100%;
       height: 90px;
-      background: #000;
-      border: 1px solid #222;
-      border-radius: 3px;
+      background: #fff;
+      border: 1px solid #000;
       position: relative;
       overflow: hidden;
     }
     .key { position: absolute; bottom: 0; }
     .white-key {
-      background: #e5e5e5;
+      background: #fff;
       height: 100%;
-      border-right: 1px solid #999;
+      border-right: 1px solid #000;
       z-index: 1;
     }
-    .white-key.active { background: #555 !important; }
+    .white-key.active { background: #000 !important; }
     .black-key {
-      background: #111;
+      background: #000;
       height: 60%;
       border: 1px solid #000;
       z-index: 2;
     }
-    .black-key.active { background: #888 !important; }
+    .black-key.active {
+      background: #fff !important;
+      border: 2px solid #000 !important;
+    }
 
     #status {
-      font-size: 11px;
-      color: #666;
+      font-size: 12px;
+      color: #000;
       margin-top: 6px;
     }
     #loader {
       display: none;
       font-size: 12px;
-      color: #888;
+      color: #000;
       margin-left: 8px;
     }
     #loader.show { display: inline-block; }
@@ -235,7 +232,7 @@
           <div class="row" style="gap: 6px;">
             <input type="range" id="spk-dist" min="15" max="300" value="52">
             <input type="number" id="spk-dist-n" min="15" max="300" value="52" step="0.5">
-            <span style="font-size: 11px; color: #666;">cm</span>
+            <span style="font-size: 11px;">cm</span>
           </div>
         </div>
         <div class="control-item">
@@ -243,7 +240,7 @@
           <div class="row" style="gap: 6px;">
             <input type="range" id="list-depth" min="15" max="300" value="50">
             <input type="number" id="list-depth-n" min="15" max="300" value="50" step="0.5">
-            <span style="font-size: 11px; color: #666;">cm</span>
+            <span style="font-size: 11px;">cm</span>
           </div>
         </div>
         <div class="control-item">
@@ -251,7 +248,7 @@
           <div class="row" style="gap: 6px;">
             <input type="range" id="list-x" min="-100" max="100" value="0">
             <input type="number" id="list-x-n" min="-100" max="100" value="0" step="0.5">
-            <span style="font-size: 11px; color: #666;">cm</span>
+            <span style="font-size: 11px;">cm</span>
           </div>
         </div>
         <div class="control-item">
@@ -259,7 +256,7 @@
           <div class="row" style="gap: 6px;">
             <input type="range" id="toein" min="0" max="60" value="15">
             <input type="number" id="toein-n" min="0" max="60" value="15">
-            <span style="font-size: 11px; color: #666;">deg</span>
+            <span style="font-size: 11px;">deg</span>
           </div>
         </div>
         <div class="control-item">
@@ -289,7 +286,7 @@
       <button id="btn-run-down" disabled>▼ Run Down</button>
       <label style="margin-left: auto;">
         Vol
-        <input type="range" id="vol" min="0" max="150" value="100">
+        <input type="range" id="vol" min="0" max="1000" value="100" step="5">
         <span class="val-display" id="vol-txt">100%</span>
       </label>
       <label>
@@ -442,6 +439,12 @@ async function ensureAudio() {
   masterGain.gain.value = state.vol;
 
   const comp = audioCtx.createDynamicsCompressor();
+  comp.threshold.value = -3;
+  comp.knee.value = 6;
+  comp.ratio.value = 20;
+  comp.attack.value = 0.003;
+  comp.release.value = 0.1;
+
   pannerL.connect(masterGain);
   pannerR.connect(masterGain);
   masterGain.connect(comp);
@@ -568,7 +571,7 @@ function drawStage() {
   const list = toScreen(state.listenerOffset, state.listenerDepth);
 
   // Lines
-  ctx.strokeStyle = '#222';
+  ctx.strokeStyle = '#000';
   ctx.lineWidth = 1;
   ctx.beginPath();
   ctx.moveTo(spkL.x, spkL.y); ctx.lineTo(list.x, list.y);
@@ -576,14 +579,14 @@ function drawStage() {
   ctx.stroke();
 
   // Dimension line
-  ctx.strokeStyle = '#444';
+  ctx.strokeStyle = '#000';
   ctx.setLineDash([2, 2]);
   ctx.beginPath();
   ctx.moveTo(spkL.x, spkL.y - 18); ctx.lineTo(spkR.x, spkR.y - 18);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  ctx.fillStyle = '#888';
+  ctx.fillStyle = '#000';
   ctx.font = '10px monospace';
   ctx.textAlign = 'center';
   ctx.fillText(`${state.spkDist.toFixed(1)} cm`, (spkL.x + spkR.x) / 2, spkL.y - 22);
@@ -593,16 +596,18 @@ function drawStage() {
     ctx.save();
     ctx.translate(p.x, p.y);
     ctx.rotate(angle);
-    ctx.strokeStyle = '#fff';
+    ctx.strokeStyle = '#000';
     ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(-12, -8, 24, 16);
     ctx.strokeRect(-12, -8, 24, 16);
-    ctx.fillStyle = '#222';
+    ctx.fillStyle = '#000';
     ctx.beginPath();
     ctx.arc(0, 0, 4, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
 
-    ctx.fillStyle = '#bbb';
+    ctx.fillStyle = '#000';
     ctx.font = '10px sans-serif';
     ctx.fillText(lbl, p.x, p.y + 18);
   }
@@ -611,11 +616,10 @@ function drawStage() {
   drawSpk(spkR, toeRad, 'R');
 
   // Listener
-  ctx.fillStyle = '#fff';
+  ctx.fillStyle = '#000';
   ctx.beginPath();
   ctx.arc(list.x, list.y, 8, 0, Math.PI * 2);
   ctx.fill();
-  ctx.fillStyle = '#888';
   ctx.fillText(`${state.listenerDepth.toFixed(1)} cm`, list.x, list.y + 20);
 
   requestAnimationFrame(drawStage);
@@ -656,8 +660,8 @@ async function runSweep(asc) {
 
   state.sweepActive = true;
   state.sweepCancel = false;
-  dom.runUp.textContent = asc ? '■ Stop' : '▲ Run Up';
-  dom.runDown.textContent = !asc ? '■ Stop' : '▼ Run Down';
+  dom.runUp.textContent = asc ? 'Stop' : '▲ Run Up';
+  dom.runDown.textContent = !asc ? 'Stop' : '▼ Run Down';
 
   const notes = asc ? [...WHITE_KEYS] : [...WHITE_KEYS].reverse();
   const stepMs = 32;
