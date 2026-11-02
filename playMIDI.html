@@ -3,9 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MIDI Player – 2D 物理スピーカー音響モデリング & 88鍵ビジュアライザー</title>
-
-  <!-- SpessaSynth: 高性能 AudioWorklet ベース SF2/SF3 シンセ -->
+  <title>MIDI Player</title>
   <script type="importmap">
   {
     "imports": {
@@ -14,140 +12,131 @@
     }
   }
   </script>
-
   <style>
-    :root {
-      --bg: #0b0c10;
-      --panel: #16181f;
-      --panel-hover: #1e212b;
-      --border: #262a38;
-      --text: #e2e5ee;
-      --sub: #7a8298;
-      --acc: #4da3ff;
-      --green: #30a46c;
-      --orange: #f5a524;
-      --red: #e5484d;
-      --spk-l: #3b82f6;
-      --spk-r: #ec4899;
-      --listener: #10b981;
-    }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif;
+      background: #0a0a0a;
+      color: #ddd;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px;
       display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px 16px 48px;
-      min-height: 100vh;
+      justify-content: center;
     }
-    h1 { font-size: 20px; font-weight: 700; margin-bottom: 4px; letter-spacing: -0.02em; }
-    .subtitle { font-size: 12px; color: var(--sub); margin-bottom: 18px; text-align: center; }
-
-    /* ─── メインレイアウト ─── */
-    .container {
+    .app {
       width: 100%;
       max-width: 960px;
       display: flex;
       flex-direction: column;
       gap: 16px;
     }
-
-    .panel {
-      background: var(--panel);
-      border: 1px solid var(--border);
-      border-radius: 12px;
-      padding: 16px 20px;
+    h1 {
+      font-size: 16px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: #fff;
     }
-    .panel-title {
-      font-size: 12px;
-      font-weight: 700;
-      color: var(--sub);
+    .panel {
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 4px;
+      padding: 14px 16px;
+    }
+    .panel-header {
+      font-size: 11px;
+      font-weight: 600;
+      color: #666;
       text-transform: uppercase;
-      letter-spacing: .08em;
+      letter-spacing: 0.06em;
       margin-bottom: 12px;
       display: flex;
       justify-content: space-between;
       align-items: center;
     }
-
-    /* ─── コントロール ─── */
     .row {
       display: flex;
       flex-wrap: wrap;
-      gap: 12px 20px;
+      gap: 10px 18px;
       align-items: center;
     }
-    label { font-size: 13px; color: var(--sub); display: flex; align-items: center; gap: 8px; }
+    label {
+      font-size: 12px;
+      color: #888;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
     select, input[type=number], input[type=range] {
+      background: #000;
+      color: #ddd;
+      border: 1px solid #333;
+      border-radius: 3px;
       font: inherit;
-      color: var(--text);
-      background: var(--bg);
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      font-size: 12px;
     }
-    select { padding: 6px 10px; cursor: pointer; }
+    select { padding: 4px 6px; }
     input[type=number] {
-      width: 72px;
-      padding: 5px 8px;
+      width: 64px;
+      padding: 3px 6px;
       text-align: right;
-      font-variant-numeric: tabular-nums;
     }
-    input[type=range] { cursor: pointer; accent-color: var(--acc); width: 120px; }
-    input[type=file] { font: inherit; color: var(--sub); font-size: 12px; }
-
-    button {
-      font: inherit;
-      font-size: 13px;
-      padding: 7px 16px;
-      border-radius: 8px;
-      border: 1px solid var(--border);
-      background: var(--panel);
-      color: var(--text);
+    input[type=range] {
+      width: 100px;
+      accent-color: #888;
       cursor: pointer;
-      transition: border-color .15s, background .15s;
     }
-    button:hover:not(:disabled) { border-color: var(--acc); background: var(--panel-hover); }
-    button:disabled { opacity: .4; cursor: default; }
-    button.primary {
-      background: var(--acc);
-      border-color: var(--acc);
-      color: #fff;
+    input[type=file] {
+      font-size: 11px;
+      color: #777;
+    }
+    button {
+      background: #1a1a1a;
+      color: #eee;
+      border: 1px solid #333;
+      border-radius: 3px;
+      padding: 5px 12px;
+      font: inherit;
+      font-size: 12px;
+      cursor: pointer;
+    }
+    button:hover:not(:disabled) {
+      background: #252525;
+      border-color: #555;
+    }
+    button:disabled {
+      opacity: 0.3;
+      cursor: default;
+    }
+    button.btn-strong {
+      background: #eee;
+      color: #000;
+      border-color: #fff;
       font-weight: 600;
     }
-    button.primary:hover:not(:disabled) { filter: brightness(1.1); }
-    button.danger { color: var(--red); border-color: var(--red); }
-    button.preset-btn {
-      padding: 5px 10px;
+    button.btn-strong:hover:not(:disabled) {
+      background: #fff;
+    }
+    .val-display {
       font-size: 11px;
-      background: rgba(255,255,255,0.04);
+      color: #aaa;
+      min-width: 38px;
+      font-variant-numeric: tabular-nums;
     }
 
-    .val { min-width: 44px; font-variant-numeric: tabular-nums; color: var(--acc); font-weight: 600; font-size: 13px; }
-
-    /* ─── 2D スピーカー見取り図 (Canvas) ─── */
-    .speaker-stage-wrap {
+    .stage-layout {
       display: grid;
       grid-template-columns: 1fr;
       gap: 16px;
     }
-    @media (min-width: 820px) {
-      .speaker-stage-wrap {
-        grid-template-columns: 460px 1fr;
-      }
+    @media (min-width: 760px) {
+      .stage-layout { grid-template-columns: 420px 1fr; }
     }
-
-    #stage-canvas-container {
-      position: relative;
+    #stage-wrap {
       width: 100%;
-      height: 380px;
-      background: #08090d;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      overflow: hidden;
-      cursor: crosshair;
-      user-select: none;
+      height: 320px;
+      background: #050505;
+      border: 1px solid #222;
+      border-radius: 3px;
+      position: relative;
       touch-action: none;
     }
     #stage-canvas {
@@ -155,1164 +144,700 @@
       height: 100%;
       display: block;
     }
-    .canvas-overlay-hint {
-      position: absolute;
-      top: 8px;
-      left: 12px;
-      font-size: 11px;
-      color: #62697e;
-      pointer-events: none;
-    }
-
-    /* ─── パラメータ一覧 ─── */
-    .param-group {
+    .controls-grid {
       display: flex;
       flex-direction: column;
-      gap: 14px;
+      gap: 10px;
+      justify-content: center;
     }
-    .param-row {
+    .control-item {
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 12px;
-      font-size: 13px;
-    }
-    .param-label {
-      color: var(--text);
-      display: flex;
-      align-items: center;
-      gap: 6px;
-    }
-    .param-badge {
-      width: 10px; height: 10px;
-      border-radius: 50%;
-      display: inline-block;
-    }
-    .param-inputs {
-      display: flex;
-      align-items: center;
       gap: 8px;
-    }
-    .unit { font-size: 12px; color: var(--sub); min-width: 22px; }
-
-    /* ─── ステータスバー ─── */
-    #status-bar {
       font-size: 12px;
-      color: var(--sub);
-      display: flex;
-      align-items: center;
-      gap: 8px;
     }
-    #status-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: var(--sub);
-      flex-shrink: 0;
-    }
-    #status-dot.ok   { background: var(--green); }
-    #status-dot.warn { background: var(--orange); }
-    #status-dot.err  { background: var(--red); }
-    #status-dot.play { background: var(--acc); animation: pulse .8s infinite alternate; }
-    @keyframes pulse { to { opacity: .3; } }
 
-    /* ─── シークバー ─── */
-    #seek-wrap { display: none; }
-    #seek-wrap.visible { display: block; }
-    #seek-bar { width: 100%; accent-color: var(--acc); cursor: pointer; }
-    #time-label {
+    #seek-container {
+      display: none;
+      margin-bottom: 12px;
+    }
+    #seek-container.active { display: block; }
+    #seek-bar { width: 100%; }
+    #time-display {
       font-size: 11px;
-      color: var(--sub);
+      color: #666;
       text-align: right;
-      margin-top: 2px;
       font-variant-numeric: tabular-nums;
+      margin-top: 2px;
     }
 
-    /* ─── ピアノ鍵盤 ─── */
-    #piano-container {
-      position: relative;
-      height: 105px;
+    #piano-wrap {
       width: 100%;
-      background: #08090d;
-      border: 1px solid var(--border);
-      border-radius: 6px;
+      height: 90px;
+      background: #000;
+      border: 1px solid #222;
+      border-radius: 3px;
+      position: relative;
       overflow: hidden;
     }
-    .key { position: absolute; bottom: 0; border-radius: 0 0 3px 3px; }
+    .key { position: absolute; bottom: 0; }
     .white-key {
-      background: #ededed;
+      background: #e5e5e5;
       height: 100%;
-      border-right: 1px solid #bbb;
+      border-right: 1px solid #999;
       z-index: 1;
-      transition: background .03s;
     }
+    .white-key.active { background: #555 !important; }
     .black-key {
-      background: #17181c;
-      height: 62%;
+      background: #111;
+      height: 60%;
       border: 1px solid #000;
       z-index: 2;
-      transition: background .03s;
     }
-    .active-0  { background: #4da3ff !important; }
-    .active-1  { background: #30a46c !important; }
-    .active-2  { background: #f5a524 !important; }
-    .active-3  { background: #e5484d !important; }
-    .active-4  { background: #d6409f !important; }
-    .active-5  { background: #6e56cf !important; }
-    .active-6  { background: #12a594 !important; }
-    .active-7  { background: #f76b15 !important; }
-    .active-8  { background: #a3d900 !important; }
-    .active-9  { background: #ffd60a !important; } /* ドラム */
-    .active-10 { background: #00b8d9 !important; }
-    .active-11 { background: #3b82f6 !important; }
-    .active-12 { background: #ec4899 !important; }
-    .active-13 { background: #8b5cf6 !important; }
-    .active-14 { background: #14b8a6 !important; }
-    .active-15 { background: #f97316 !important; }
+    .black-key.active { background: #888 !important; }
 
-    #speaker-info {
-      display: flex;
-      justify-content: space-between;
-      width: 100%;
-      margin-top: 4px;
+    #status {
       font-size: 11px;
-      color: var(--sub);
+      color: #666;
+      margin-top: 6px;
     }
-
-    /* ─── チャンネル凡例 ─── */
-    #ch-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px 12px;
-      font-size: 11px;
-    }
-    .ch-chip {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-      color: var(--sub);
-      opacity: 0.35;
-      transition: opacity .2s;
-    }
-    .ch-chip.active { opacity: 1; }
-    .ch-dot { width: 8px; height: 8px; border-radius: 50%; }
-
-    /* ─── ローディング オーバーレイ ─── */
-    #sf-loader {
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,.7);
+    #loader {
       display: none;
-      align-items: center;
-      justify-content: center;
-      z-index: 100;
-      flex-direction: column;
-      gap: 12px;
+      font-size: 12px;
+      color: #888;
+      margin-left: 8px;
     }
-    #sf-loader.show { display: flex; }
-    #sf-loader p { font-size: 14px; color: var(--text); }
-    .spinner {
-      width: 36px; height: 36px;
-      border: 3px solid var(--border);
-      border-top-color: var(--acc);
-      border-radius: 50%;
-      animation: spin .7s linear infinite;
-    }
-    @keyframes spin { to { transform: rotate(360deg); } }
+    #loader.show { display: inline-block; }
   </style>
 </head>
 <body>
 
-<div class="container">
-  <header style="text-align: center;">
-    <h1>📐 2D 物理スピーカー音響モデリング & MIDI Player</h1>
-    <p class="subtitle">スピーカーとリスナーの距離・位置をcm単位でシミュレート ／ Web Audio HRTF 空間立体音響</p>
-  </header>
+<div class="app">
+  <h1>MIDI Player</h1>
 
-  <!-- ─── 2D スピーカー・音響ステージ設定 ─── -->
   <div class="panel">
-    <div class="panel-title">
-      <span>2D 空間音響ステージ (俯瞰ビュー)</span>
-      <div style="display:flex; gap:6px;">
-        <button class="preset-btn" data-preset="desktop">🖥️ 卓上ニアフィールド (52cm / 50cm)</button>
-        <button class="preset-btn" data-preset="triangle">📐 正三角形モニター (90cm / 90cm)</button>
-        <button class="preset-btn" data-preset="piano">🎹 ピアノ演奏席 (123cm / 45cm)</button>
-        <button class="preset-btn" data-preset="living">🛋️ リビング (180cm / 220cm)</button>
+    <div class="panel-header">
+      <span>2D Speaker Acoustics</span>
+      <div class="row" style="gap: 6px;">
+        <button id="p-desktop">Desktop (52cm)</button>
+        <button id="p-studio">Studio (90cm)</button>
+        <button id="p-piano">Piano (123cm)</button>
       </div>
     </div>
-
-    <div class="speaker-stage-wrap">
-      <!-- 2D Canvas -->
-      <div id="stage-canvas-container">
+    <div class="stage-layout">
+      <div id="stage-wrap">
         <canvas id="stage-canvas"></canvas>
-        <div class="canvas-overlay-hint">ドラッグしてスピーカー・リスナーを移動</div>
       </div>
-
-      <!-- cm 単位パラメータ -->
-      <div class="param-group">
-        <div class="param-row">
-          <span class="param-label">
-            <span class="param-badge" style="background: var(--spk-l);"></span>
-            スピーカー間隔 (Spread)
-          </span>
-          <div class="param-inputs">
-            <input type="range" id="spk-dist-slider" min="15" max="300" value="52" step="1">
-            <input type="number" id="spk-dist-num" min="15" max="300" value="52" step="0.5">
-            <span class="unit">cm</span>
+      <div class="controls-grid">
+        <div class="control-item">
+          <span>Speaker Spread</span>
+          <div class="row" style="gap: 6px;">
+            <input type="range" id="spk-dist" min="15" max="300" value="52">
+            <input type="number" id="spk-dist-n" min="15" max="300" value="52" step="0.5">
+            <span style="font-size: 11px; color: #666;">cm</span>
           </div>
         </div>
-
-        <div class="param-row">
-          <span class="param-label">
-            <span class="param-badge" style="background: var(--listener);"></span>
-            リスナー前後距離 (Depth)
-          </span>
-          <div class="param-inputs">
-            <input type="range" id="list-depth-slider" min="15" max="300" value="50" step="1">
-            <input type="number" id="list-depth-num" min="15" max="300" value="50" step="0.5">
-            <span class="unit">cm</span>
+        <div class="control-item">
+          <span>Listener Depth</span>
+          <div class="row" style="gap: 6px;">
+            <input type="range" id="list-depth" min="15" max="300" value="50">
+            <input type="number" id="list-depth-n" min="15" max="300" value="50" step="0.5">
+            <span style="font-size: 11px; color: #666;">cm</span>
           </div>
         </div>
-
-        <div class="param-row">
-          <span class="param-label">
-            リスナー左右位置 (Offset X)
-          </span>
-          <div class="param-inputs">
-            <input type="range" id="list-x-slider" min="-100" max="100" value="0" step="1">
-            <input type="number" id="list-x-num" min="-100" max="100" value="0" step="0.5">
-            <span class="unit">cm</span>
+        <div class="control-item">
+          <span>Listener Offset X</span>
+          <div class="row" style="gap: 6px;">
+            <input type="range" id="list-x" min="-100" max="100" value="0">
+            <input type="number" id="list-x-n" min="-100" max="100" value="0" step="0.5">
+            <span style="font-size: 11px; color: #666;">cm</span>
           </div>
         </div>
-
-        <div class="param-row">
-          <span class="param-label">
-            スピーカー内振り角 (Toe-in)
-          </span>
-          <div class="param-inputs">
-            <input type="range" id="toein-slider" min="0" max="60" value="15" step="1">
-            <input type="number" id="toein-num" min="0" max="60" value="15" step="1">
-            <span class="unit">°</span>
+        <div class="control-item">
+          <span>Toe-in Angle</span>
+          <div class="row" style="gap: 6px;">
+            <input type="range" id="toein" min="0" max="60" value="15">
+            <input type="number" id="toein-n" min="0" max="60" value="15">
+            <span style="font-size: 11px; color: #666;">deg</span>
           </div>
         </div>
-
-        <div class="param-row">
-          <span class="param-label">立体音響方式</span>
-          <select id="spatial-mode">
-            <option value="hrtf">HRTF バイノーラル 3D (ヘッドホン推奨)</option>
-            <option value="direct">ダイレクト・ステレオパン (等パワー)</option>
+        <div class="control-item">
+          <span>Acoustic Mode</span>
+          <select id="acoustic-mode">
+            <option value="hrtf">HRTF 3D (Binaural)</option>
+            <option value="direct">Equal Power Stereo</option>
           </select>
         </div>
-
-        <div style="font-size: 11px; color: var(--sub); line-height: 1.6; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 6px;">
-          💡 <b>cm単位の厳密な物理伝達</b>: スピーカーと両耳の座標から到達距離・入射角・減衰をリアルタイム演算します。ヘッドホンやイヤホンで聴くと、実際に指定した距離・位置にスピーカーがあるように聴こえます。
-        </div>
       </div>
     </div>
   </div>
 
-  <!-- ─── ファイル & 再生パネル ─── -->
   <div class="panel">
-    <div class="panel-title">MIDI & サウンドフォント</div>
+    <div class="panel-header">Sources & Transport</div>
     <div class="row" style="margin-bottom: 12px;">
-      <label>MIDI <input type="file" id="midi-upload" accept=".mid,.midi,.kar"></label>
-      <label>SoundFont <input type="file" id="sf-upload" accept=".sf2,.sf3,.sfogg,.dls"></label>
-      <button id="sf-default-btn">🌐 デフォルト SF (GeneralUser GS)</button>
+      <label>MIDI <input type="file" id="midi-in" accept=".mid,.midi"></label>
+      <label>SoundFont <input type="file" id="sf-in" accept=".sf2,.sf3"></label>
+      <button id="sf-load-default">Default SF (GeneralUser GS)</button>
+      <span id="loader">loading...</span>
     </div>
-
     <div class="row">
-      <button id="play-btn" class="primary" disabled>▶ 再生</button>
-      <button id="pause-btn" disabled>⏸ 一時停止</button>
-      <button id="stop-btn" class="danger" disabled>■ 停止</button>
-      <label>
-        音量
-        <input type="range" id="vol-slider" min="0" max="200" value="100" step="1">
-        <span class="val" id="vol-val">100%</span>
+      <button id="btn-play" class="btn-strong" disabled>Play</button>
+      <button id="btn-pause" disabled>Pause</button>
+      <button id="btn-stop" disabled>Stop</button>
+      <button id="btn-run-up" disabled>▲ Run Up</button>
+      <button id="btn-run-down" disabled>▼ Run Down</button>
+      <label style="margin-left: auto;">
+        Vol
+        <input type="range" id="vol" min="0" max="150" value="100">
+        <span class="val-display" id="vol-txt">100%</span>
       </label>
       <label>
-        テンポ
-        <input type="range" id="tempo-slider" min="25" max="300" value="100" step="1">
-        <span class="val" id="tempo-val">100%</span>
+        Tempo
+        <input type="range" id="tempo" min="25" max="300" value="100">
+        <span class="val-display" id="tempo-txt">100%</span>
       </label>
     </div>
   </div>
 
-  <!-- ─── 再生進捗 & 鍵盤 ─── -->
   <div class="panel">
-    <div id="status-bar" style="margin-bottom: 10px;">
-      <div id="status-dot"></div>
-      <span id="status-msg">SoundFont または MIDI ファイルを選択してください</span>
-    </div>
-
-    <div id="seek-wrap" style="margin-bottom: 12px;">
+    <div id="seek-container">
       <input type="range" id="seek-bar" min="0" max="1000" value="0">
-      <div id="time-label">0:00 / 0:00</div>
+      <div id="time-display">0:00 / 0:00</div>
     </div>
-
-    <div id="piano-container"></div>
-    <div id="speaker-info">
-      <span>◀ L (Note 21: A0)</span>
-      <span>Center (Note 60: C4)</span>
-      <span>R (Note 108: C8) ▶</span>
-    </div>
-
-    <div id="ch-legend" style="margin-top: 12px;"></div>
+    <div id="piano-wrap"></div>
+    <div id="status">Select SoundFont and MIDI file</div>
   </div>
-</div>
-
-<!-- ─── ローディング ─── -->
-<div id="sf-loader">
-  <div class="spinner"></div>
-  <p id="sf-loader-msg">読み込み中…</p>
 </div>
 
 <script type="module">
 import { WorkletSynthesizer, Sequencer } from 'spessasynth_lib';
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  定数 & 色
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const CH_COLORS = [
-  '#4da3ff','#30a46c','#f5a524','#e5484d',
-  '#d6409f','#6e56cf','#12a594','#f76b15',
-  '#a3d900','#ffd60a','#00b8d9','#3b82f6',
-  '#ec4899','#8b5cf6','#14b8a6','#f97316',
+const WHITE_KEYS = [
+  21, 23, 24, 26, 28, 29, 31, 33, 35, 36,
+  38, 40, 41, 43, 45, 47, 48, 50, 52, 53,
+  55, 57, 59, 60, 62, 64, 65, 67, 69, 71,
+  72, 74, 76, 77, 79, 81, 83, 84, 86, 88,
+  89, 91, 93, 95, 96, 98, 100, 101, 103, 105, 107, 108
 ];
 
-const PRESETS = {
-  desktop:  { dist: 52, depth: 50, offsetX: 0, toein: 15 },
-  triangle: { dist: 90, depth: 90, offsetX: 0, toein: 30 },
-  piano:    { dist: 123, depth: 45, offsetX: 0, toein: 10 },
-  living:   { dist: 180, depth: 220, offsetX: 0, toein: 20 },
+const state = {
+  spkDist: 52,
+  listenerDepth: 50,
+  listenerOffset: 0,
+  toeIn: 15,
+  acousticMode: 'hrtf',
+  vol: 1.0,
+  tempo: 1.0,
+  isPlaying: false,
+  isPaused: false,
+  sweepActive: false,
+  sweepCancel: false
 };
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  状態 (cm単位)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let speakerDistCm = 52.0;   // 左右スピーカー間隔 (cm)
-let listenerDepthCm = 50.0; // リスナー距離 (cm)
-let listenerOffsetX = 0.0;  // リスナー左右オフセット (cm)
-let toeInDeg = 15.0;        // 内振り角 (度)
-let spatialMode = 'hrtf';   // 'hrtf' | 'direct'
+const dom = {
+  canvas: document.getElementById('stage-canvas'),
+  stageWrap: document.getElementById('stage-wrap'),
+  spkDist: document.getElementById('spk-dist'),
+  spkDistN: document.getElementById('spk-dist-n'),
+  listDepth: document.getElementById('list-depth'),
+  listDepthN: document.getElementById('list-depth-n'),
+  listX: document.getElementById('list-x'),
+  listXN: document.getElementById('list-x-n'),
+  toein: document.getElementById('toein'),
+  toeinN: document.getElementById('toein-n'),
+  mode: document.getElementById('acoustic-mode'),
+  play: document.getElementById('btn-play'),
+  pause: document.getElementById('btn-pause'),
+  stop: document.getElementById('btn-stop'),
+  runUp: document.getElementById('btn-run-up'),
+  runDown: document.getElementById('btn-run-down'),
+  vol: document.getElementById('vol'),
+  volTxt: document.getElementById('vol-txt'),
+  tempo: document.getElementById('tempo'),
+  tempoTxt: document.getElementById('tempo-txt'),
+  seekWrap: document.getElementById('seek-container'),
+  seek: document.getElementById('seek-bar'),
+  time: document.getElementById('time-display'),
+  status: document.getElementById('status'),
+  loader: document.getElementById('loader'),
+  midiIn: document.getElementById('midi-in'),
+  sfIn: document.getElementById('sf-in'),
+  sfDefault: document.getElementById('sf-load-default'),
+  piano: document.getElementById('piano-wrap')
+};
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  DOM 要素
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const $ = id => document.getElementById(id);
-const stageCanvas = $('stage-canvas');
-const stageContainer = $('stage-canvas-container');
-const ctx2d = stageCanvas.getContext('2d');
-
-const spkDistSlider = $('spk-dist-slider');
-const spkDistNum    = $('spk-dist-num');
-const listDepthSlider = $('list-depth-slider');
-const listDepthNum    = $('list-depth-num');
-const listXSlider   = $('list-x-slider');
-const listXNum      = $('list-x-num');
-const toeinSlider   = $('toein-slider');
-const toeinNum      = $('toein-num');
-const spatialModeSel = $('spatial-mode');
-
-const playBtn     = $('play-btn');
-const pauseBtn    = $('pause-btn');
-const stopBtn     = $('stop-btn');
-const volSlider   = $('vol-slider');
-const volVal      = $('vol-val');
-const tempoSlider = $('tempo-slider');
-const tempoVal    = $('tempo-val');
-const seekBar     = $('seek-bar');
-const timeLabel   = $('time-label');
-const seekWrap    = $('seek-wrap');
-const statusDot   = $('status-dot');
-const statusMsg   = $('status-msg');
-const sfLoader    = $('sf-loader');
-const sfLoaderMsg = $('sf-loader-msg');
-const container   = $('piano-container');
-const legend      = $('ch-legend');
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  Web Audio グラフ状態
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let audioCtx    = null;
-let synth       = null;
-let sequencer   = null;
-let masterGain  = null;
-let splitter    = null;
-let pannerL     = null;
-let pannerR     = null;
-let directPanL  = null;
-let directPanR  = null;
-
-let sfBuffer    = null;
-let midiBuffer  = null;
-let midiFileName = '';
-let currentDuration = 0;
-let isPlaying   = false;
-let isPaused    = false;
-let seekTimer   = null;
-
-// アクティブノート追跡
-const activeNotes = new Map();
-
-// 音波アニメーション用パルス
-const pulsesL = [];
-const pulsesR = [];
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ステータス表示
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function setStatus(msg, kind = '') {
-  statusMsg.textContent = msg;
-  statusDot.className = kind;
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  88 鍵盤 UI 生成
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 const keysMap = new Map();
-(function buildPiano() {
+(function initKeyboard() {
   const totalWhite = 52;
-  const wPct = 100 / totalWhite;
-  let wi = 0;
+  const widthPct = 100 / totalWhite;
+  let whiteIdx = 0;
   for (let m = 21; m <= 108; m++) {
-    const isBlack = [1,3,6,8,10].includes(m % 12);
+    const isBlack = [1, 3, 6, 8, 10].includes(m % 12);
     const el = document.createElement('div');
     el.className = `key ${isBlack ? 'black-key' : 'white-key'}`;
-    el.dataset.note = m;
     if (!isBlack) {
-      el.style.left  = `${wi * wPct}%`;
-      el.style.width = `${wPct}%`;
-      wi++;
+      el.style.left = `${whiteIdx * widthPct}%`;
+      el.style.width = `${widthPct}%`;
+      whiteIdx++;
     } else {
-      el.style.left  = `${(wi - 0.68) * wPct}%`;
-      el.style.width = `${wPct * 0.65}%`;
+      el.style.left = `${(whiteIdx - 0.7) * widthPct}%`;
+      el.style.width = `${widthPct * 0.7}%`;
     }
-    container.appendChild(el);
+    dom.piano.appendChild(el);
     keysMap.set(m, el);
   }
 })();
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  チャンネル凡例
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-const chChips = [];
-for (let ch = 0; ch < 16; ch++) {
-  const chip = document.createElement('div');
-  chip.className = 'ch-chip';
-  chip.dataset.ch = ch;
-  const dot = document.createElement('div');
-  dot.className = 'ch-dot';
-  dot.style.background = CH_COLORS[ch];
-  const lbl = document.createElement('span');
-  lbl.textContent = ch === 9 ? `Ch${ch+1} Drum` : `Ch${ch+1}`;
-  chip.appendChild(dot);
-  chip.appendChild(lbl);
-  legend.appendChild(chip);
-  chChips.push(chip);
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  鍵盤ノート ON / OFF
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function noteOn(note, ch) {
-  if (note < 21 || note > 108) return;
-  if (!activeNotes.has(note)) activeNotes.set(note, new Set());
-  activeNotes.get(note).add(ch);
-  refreshKey(note);
-  chChips[ch]?.classList.add('active');
-
-  // 音波パルス生成
-  const norm = (note - 21) / (108 - 21); // 0 (左端) 〜 1 (右端)
-  if (norm < 0.6) pulsesL.push({ r: 0, alpha: 0.8 * (1 - norm * 0.7), color: CH_COLORS[ch] });
-  if (norm > 0.4) pulsesR.push({ r: 0, alpha: 0.8 * (norm * 0.7 + 0.3), color: CH_COLORS[ch] });
-}
-
-function noteOff(note, ch) {
-  if (note < 21 || note > 108) return;
-  const s = activeNotes.get(note);
-  if (s) {
-    s.delete(ch);
-    if (s.size === 0) activeNotes.delete(note);
-  }
-  refreshKey(note);
-  const chStillActive = [...activeNotes.values()].some(st => st.has(ch));
-  if (!chStillActive) chChips[ch]?.classList.remove('active');
-}
-
-function refreshKey(note) {
+function setKey(note, on) {
   const el = keysMap.get(note);
-  if (!el) return;
-  for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
-  const s = activeNotes.get(note);
-  if (s && s.size > 0) {
-    const ch = s.values().next().value;
-    el.classList.add(`active-${ch}`);
-  }
+  if (el) el.classList.toggle('active', on);
+}
+function clearKeys() {
+  for (let [_, el] of keysMap) el.classList.remove('active');
 }
 
-function allNotesOff() {
-  activeNotes.clear();
-  for (let m = 21; m <= 108; m++) {
-    const el = keysMap.get(m);
-    if (el) for (let i = 0; i < 16; i++) el.classList.remove(`active-${i}`);
-  }
-  chChips.forEach(c => c.classList.remove('active'));
-}
+let audioCtx = null;
+let synth = null;
+let sequencer = null;
+let masterGain = null;
+let splitter = null;
+let pannerL = null;
+let pannerR = null;
+let sfBuffer = null;
+let midiBuffer = null;
+let midiFileName = '';
+let duration = 0;
+let seekTimer = null;
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  2D Canvas 俯瞰シミュレーター描画
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let canvasW = 0, canvasH = 0;
-function resizeCanvas() {
-  const rect = stageContainer.getBoundingClientRect();
-  canvasW = rect.width;
-  canvasH = rect.height;
-  stageCanvas.width = canvasW * window.devicePixelRatio;
-  stageCanvas.height = canvasH * window.devicePixelRatio;
-  ctx2d.scale(window.devicePixelRatio, window.devicePixelRatio);
-}
-window.addEventListener('resize', resizeCanvas);
-resizeCanvas();
-
-// cm -> Canvas 座標変換
-// 原点 (0, 0): スピーカー間の中央
-function cmToCanvas(xCm, depthCm) {
-  const maxSpanCm = Math.max(speakerDistCm, listenerDepthCm, 120) * 1.5;
-  const scale = Math.min((canvasW - 80) / maxSpanCm, (canvasH - 80) / maxSpanCm);
-  const cx = canvasW / 2;
-  const topY = 60; // スピーカーのベース Y
-  return {
-    x: cx + xCm * scale,
-    y: topY + depthCm * scale,
-    scale
-  };
-}
-
-function canvasToCm(px, py) {
-  const maxSpanCm = Math.max(speakerDistCm, listenerDepthCm, 120) * 1.5;
-  const scale = Math.min((canvasW - 80) / maxSpanCm, (canvasH - 80) / maxSpanCm);
-  const cx = canvasW / 2;
-  const topY = 60;
-  return {
-    xCm: (px - cx) / scale,
-    depthCm: (py - topY) / scale
-  };
-}
-
-// インタラクティブドラッグ対象
-let dragTarget = null; // 'spkL' | 'spkR' | 'listener'
-let dragStartPos = null;
-
-function renderStage() {
-  ctx2d.clearRect(0, 0, canvasW, canvasH);
-
-  // 1. グリッド描画 (10cm 単位)
-  const origin = cmToCanvas(0, 0);
-  const scale = origin.scale;
-
-  ctx2d.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx2d.lineWidth = 1;
-  const gridStep = 10 * scale; // 10cm ごと
-  for (let x = origin.x % gridStep; x < canvasW; x += gridStep) {
-    ctx2d.beginPath(); ctx2d.moveTo(x, 0); ctx2d.lineTo(x, canvasH); ctx2d.stroke();
-  }
-  for (let y = origin.y % gridStep; y < canvasH; y += gridStep) {
-    ctx2d.beginPath(); ctx2d.moveTo(0, y); ctx2d.lineTo(canvasW, y); ctx2d.stroke();
-  }
-
-  // 2. 座標計算
-  const spkL_pos = cmToCanvas(-speakerDistCm / 2, 0);
-  const spkR_pos = cmToCanvas(+speakerDistCm / 2, 0);
-  const listener_pos = cmToCanvas(listenerOffsetX, listenerDepthCm);
-
-  // 3. スピーカー間の寸法線
-  ctx2d.strokeStyle = 'rgba(77,163,255,0.4)';
-  ctx2d.lineWidth = 1;
-  ctx2d.setLineDash([3, 3]);
-  ctx2d.beginPath();
-  ctx2d.moveTo(spkL_pos.x, spkL_pos.y - 25);
-  ctx2d.lineTo(spkR_pos.x, spkR_pos.y - 25);
-  ctx2d.stroke();
-  ctx2d.setLineDash([]);
-
-  ctx2d.fillStyle = '#4da3ff';
-  ctx2d.font = '11px system-ui';
-  ctx2d.textAlign = 'center';
-  ctx2d.fillText(`間隔: ${speakerDistCm.toFixed(1)} cm`, (spkL_pos.x + spkR_pos.x) / 2, spkL_pos.y - 30);
-
-  // 4. スピーカーからリスナーへの距離線
-  const distL = Math.hypot(listenerOffsetX - (-speakerDistCm/2), listenerDepthCm);
-  const distR = Math.hypot(listenerOffsetX - (+speakerDistCm/2), listenerDepthCm);
-
-  ctx2d.strokeStyle = 'rgba(255,255,255,0.12)';
-  ctx2d.beginPath();
-  ctx2d.moveTo(spkL_pos.x, spkL_pos.y);
-  ctx2d.lineTo(listener_pos.x, listener_pos.y);
-  ctx2d.moveTo(spkR_pos.x, spkR_pos.y);
-  ctx2d.lineTo(listener_pos.x, listener_pos.y);
-  ctx2d.stroke();
-
-  // 距離ラベル
-  ctx2d.fillStyle = '#9ca3af';
-  ctx2d.font = '10px monospace';
-  ctx2d.fillText(`${distL.toFixed(1)} cm`, (spkL_pos.x + listener_pos.x) / 2 - 25, (spkL_pos.y + listener_pos.y) / 2);
-  ctx2d.fillText(`${distR.toFixed(1)} cm`, (spkR_pos.x + listener_pos.x) / 2 + 25, (spkR_pos.y + listener_pos.y) / 2);
-
-  // 5. 音波パルス描画
-  function drawPulses(list, spkPos) {
-    for (let i = list.length - 1; i >= 0; i--) {
-      const p = list[i];
-      p.r += 1.8;
-      p.alpha -= 0.012;
-      if (p.alpha <= 0) { list.splice(i, 1); continue; }
-      ctx2d.strokeStyle = p.color;
-      ctx2d.globalAlpha = p.alpha;
-      ctx2d.lineWidth = 2;
-      ctx2d.beginPath();
-      ctx2d.arc(spkPos.x, spkPos.y, p.r, 0, Math.PI * 2);
-      ctx2d.stroke();
-    }
-    ctx2d.globalAlpha = 1;
-  }
-  drawPulses(pulsesL, spkL_pos);
-  drawPulses(pulsesR, spkR_pos);
-
-  // 6. スピーカー描画 (L / R)
-  function drawSpeaker(pos, angleRad, color, label) {
-    ctx2d.save();
-    ctx2d.translate(pos.x, pos.y);
-    ctx2d.rotate(angleRad);
-
-    // スピーカー箱
-    ctx2d.fillStyle = '#1c1f2b';
-    ctx2d.strokeStyle = color;
-    ctx2d.lineWidth = 2;
-    ctx2d.beginPath();
-    ctx2d.roundRect(-16, -12, 32, 24, 4);
-    ctx2d.fill();
-    ctx2d.stroke();
-
-    // コーン指向角
-    ctx2d.fillStyle = 'rgba(255,255,255,0.06)';
-    ctx2d.beginPath();
-    ctx2d.moveTo(0, 0);
-    ctx2d.arc(0, 0, 45, Math.PI/2 - 0.5, Math.PI/2 + 0.5);
-    ctx2d.closePath();
-    ctx2d.fill();
-
-    // ウーファー
-    ctx2d.fillStyle = color;
-    ctx2d.beginPath();
-    ctx2d.arc(0, 2, 7, 0, Math.PI * 2);
-    ctx2d.fill();
-
-    ctx2d.restore();
-
-    // ラベル
-    ctx2d.fillStyle = color;
-    ctx2d.font = 'bold 11px system-ui';
-    ctx2d.textAlign = 'center';
-    ctx2d.fillText(label, pos.x, pos.y + 26);
-  }
-
-  const radToe = (toeInDeg * Math.PI) / 180;
-  drawSpeaker(spkL_pos, -radToe, '#3b82f6', '🔊 L (Left)');
-  drawSpeaker(spkR_pos, +radToe, '#ec4899', '🔊 R (Right)');
-
-  // 7. リスナー描画 (頭 + 耳)
-  ctx2d.save();
-  ctx2d.translate(listener_pos.x, listener_pos.y);
-
-  // 頭
-  ctx2d.fillStyle = '#10b981';
-  ctx2d.beginPath();
-  ctx2d.arc(0, 0, 14, 0, Math.PI * 2);
-  ctx2d.fill();
-
-  // 左右の耳
-  ctx2d.fillStyle = '#34d399';
-  ctx2d.beginPath();
-  ctx2d.ellipse(-16, 0, 3, 6, 0, 0, Math.PI * 2);
-  ctx2d.ellipse(+16, 0, 3, 6, 0, 0, Math.PI * 2);
-  ctx2d.fill();
-
-  // 鼻 (前方を向く)
-  ctx2d.fillStyle = '#059669';
-  ctx2d.beginPath();
-  ctx2d.moveTo(-4, -12);
-  ctx2d.lineTo(0, -20);
-  ctx2d.lineTo(4, -12);
-  ctx2d.closePath();
-  ctx2d.fill();
-
-  ctx2d.restore();
-
-  ctx2d.fillStyle = '#10b981';
-  ctx2d.font = 'bold 11px system-ui';
-  ctx2d.textAlign = 'center';
-  ctx2d.fillText(`👤 リスナー (${listenerDepthCm.toFixed(1)} cm)`, listener_pos.x, listener_pos.y + 28);
-
-  requestAnimationFrame(renderStage);
-}
-requestAnimationFrame(renderStage);
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  ドラッグ操作
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function getEventPos(e) {
-  const rect = stageCanvas.getBoundingClientRect();
-  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
-  const clientY = e.touches ? e.touches[0].clientY : e.clientY;
-  return {
-    x: clientX - rect.left,
-    y: clientY - rect.top
-  };
-}
-
-stageCanvas.addEventListener('pointerdown', e => {
-  const { x, y } = getEventPos(e);
-  const spkL_pos = cmToCanvas(-speakerDistCm / 2, 0);
-  const spkR_pos = cmToCanvas(+speakerDistCm / 2, 0);
-  const list_pos = cmToCanvas(listenerOffsetX, listenerDepthCm);
-
-  if (Math.hypot(x - spkL_pos.x, y - spkL_pos.y) < 25) {
-    dragTarget = 'spkL';
-  } else if (Math.hypot(x - spkR_pos.x, y - spkR_pos.y) < 25) {
-    dragTarget = 'spkR';
-  } else if (Math.hypot(x - list_pos.x, y - list_pos.y) < 25) {
-    dragTarget = 'listener';
-  }
-  if (dragTarget) {
-    stageCanvas.setPointerCapture(e.pointerId);
-  }
-});
-
-stageCanvas.addEventListener('pointermove', e => {
-  if (!dragTarget) return;
-  const { x, y } = getEventPos(e);
-  const { xCm, depthCm } = canvasToCm(x, y);
-
-  if (dragTarget === 'spkL') {
-    const newDist = Math.max(15, Math.min(300, Math.abs(xCm) * 2));
-    updateParams({ dist: newDist });
-  } else if (dragTarget === 'spkR') {
-    const newDist = Math.max(15, Math.min(300, Math.abs(xCm) * 2));
-    updateParams({ dist: newDist });
-  } else if (dragTarget === 'listener') {
-    const newDepth = Math.max(15, Math.min(300, depthCm));
-    const newOffset = Math.max(-100, Math.min(100, xCm));
-    updateParams({ depth: newDepth, offsetX: newOffset });
-  }
-});
-
-stageCanvas.addEventListener('pointerup', e => {
-  dragTarget = null;
-});
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  パラメータ更新 & 同期
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function updateParams({ dist, depth, offsetX, toein, mode }) {
-  if (dist !== undefined) {
-    speakerDistCm = dist;
-    spkDistSlider.value = dist;
-    spkDistNum.value = dist;
-  }
-  if (depth !== undefined) {
-    listenerDepthCm = depth;
-    listDepthSlider.value = depth;
-    listDepthNum.value = depth;
-  }
-  if (offsetX !== undefined) {
-    listenerOffsetX = offsetX;
-    listXSlider.value = offsetX;
-    listXNum.value = offsetX;
-  }
-  if (toein !== undefined) {
-    toeInDeg = toein;
-    toeinSlider.value = toein;
-    toeinNum.value = toein;
-  }
-  if (mode !== undefined) {
-    spatialMode = mode;
-    spatialModeSel.value = mode;
-  }
-  applyAcousticSimulation();
-}
-
-// スライダー & 入力ボックス連動
-spkDistSlider.addEventListener('input', e => updateParams({ dist: parseFloat(e.target.value) }));
-spkDistNum.addEventListener('change', e => updateParams({ dist: parseFloat(e.target.value) }));
-listDepthSlider.addEventListener('input', e => updateParams({ depth: parseFloat(e.target.value) }));
-listDepthNum.addEventListener('change', e => updateParams({ depth: parseFloat(e.target.value) }));
-listXSlider.addEventListener('input', e => updateParams({ offsetX: parseFloat(e.target.value) }));
-listXNum.addEventListener('change', e => updateParams({ offsetX: parseFloat(e.target.value) }));
-toeinSlider.addEventListener('input', e => updateParams({ toein: parseFloat(e.target.value) }));
-toeinNum.addEventListener('change', e => updateParams({ toein: parseFloat(e.target.value) }));
-spatialModeSel.addEventListener('change', e => updateParams({ mode: e.target.value }));
-
-// プリセットボタン
-document.querySelectorAll('.preset-btn').forEach(btn => {
-  btn.addEventListener('click', () => {
-    const p = PRESETS[btn.dataset.preset];
-    if (p) updateParams(p);
-  });
-});
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  Web Audio 音響シミュレーション適用
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function applyAcousticSimulation() {
-  if (!audioCtx || !pannerL || !pannerR) return;
-
-  const spkLx_m = (-speakerDistCm / 2) / 100;
-  const spkRx_m = (+speakerDistCm / 2) / 100;
-  const depth_m = listenerDepthCm / 100;
-  const offset_m = listenerOffsetX / 100;
-
-  // 1. HRTF 3D Panner モード
-  if (spatialMode === 'hrtf') {
-    // リスナーの位置: (offset_m, 0, depth_m)
-    // スピーカーの位置: L = (spkLx_m, 0, 0), R = (spkRx_m, 0, 0)
-    // 相対座標で設定
-    const relLx = spkLx_m - offset_m;
-    const relRx = spkRx_m - offset_m;
-    const relZ  = -depth_m; // 前方 (負のZ)
-
-    const now = audioCtx.currentTime;
-    pannerL.positionX.setTargetAtTime(relLx, now, 0.05);
-    pannerL.positionY.setTargetAtTime(0, now, 0.05);
-    pannerL.positionZ.setTargetAtTime(relZ, now, 0.05);
-
-    pannerR.positionX.setTargetAtTime(relRx, now, 0.05);
-    pannerR.positionY.setTargetAtTime(0, now, 0.05);
-    pannerR.positionZ.setTargetAtTime(relZ, now, 0.05);
-
-    // 指向性 (Toe-in 内振り角)
-    const radToe = (toeInDeg * Math.PI) / 180;
-    pannerL.orientationX.setTargetAtTime(Math.sin(radToe), now, 0.05);
-    pannerL.orientationZ.setTargetAtTime(Math.cos(radToe), now, 0.05);
-    pannerR.orientationX.setTargetAtTime(Math.sin(-radToe), now, 0.05);
-    pannerR.orientationZ.setTargetAtTime(Math.cos(-radToe), now, 0.05);
-
-    pannerL.panningModel = 'HRTF';
-    pannerR.panningModel = 'HRTF';
-  } else {
-    // 2. ダイレクト・ステレオパン
-    pannerL.panningModel = 'equalpower';
-    pannerR.panningModel = 'equalpower';
-    const panL = Math.max(-1, Math.min(1, (-speakerDistCm / 2 - listenerOffsetX) / 100));
-    const panR = Math.max(-1, Math.min(1, (+speakerDistCm / 2 - listenerOffsetX) / 100));
-    pannerL.positionX.setTargetAtTime(panL, audioCtx.currentTime, 0.05);
-    pannerR.positionX.setTargetAtTime(panR, audioCtx.currentTime, 0.05);
-    pannerL.positionZ.setTargetAtTime(-1, audioCtx.currentTime, 0.05);
-    pannerR.positionZ.setTargetAtTime(-1, audioCtx.currentTime, 0.05);
-  }
-}
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  AudioContext + SpessaSynth 初期化
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-async function initAudio() {
+async function ensureAudio() {
   if (synth) return;
-
-  setStatus('AudioWorklet を初期化中…', 'warn');
+  dom.loader.classList.add('show');
+  dom.status.textContent = 'Initializing AudioWorklet...';
 
   audioCtx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
-
-  // リスナー初期化 (前方向き)
-  if (audioCtx.listener.forwardX) {
-    audioCtx.listener.forwardX.value = 0;
-    audioCtx.listener.forwardY.value = 0;
-    audioCtx.listener.forwardZ.value = -1;
-    audioCtx.listener.upX.value = 0;
-    audioCtx.listener.upY.value = 1;
-    audioCtx.listener.upZ.value = 0;
-  }
-
-  // SpessaSynth AudioWorklet プロセッサを登録
   await audioCtx.audioWorklet.addModule(
     'https://cdn.jsdelivr.net/npm/spessasynth_lib@4/dist/spessasynth_processor.min.js'
   );
 
   synth = new WorkletSynthesizer(audioCtx);
 
-  // 左右スピーカー用の 3D PannerNode (HRTF)
   pannerL = audioCtx.createPanner();
   pannerR = audioCtx.createPanner();
-
   [pannerL, pannerR].forEach(p => {
     p.panningModel = 'HRTF';
     p.distanceModel = 'inverse';
-    p.refDistance = 0.5;      // 50cm を基準距離
-    p.maxDistance = 10000;
-    p.rolloffFactor = 1.0;
-    p.coneInnerAngle = 90;    // スピーカーの指向角
+    p.refDistance = 0.5;
+    p.coneInnerAngle = 90;
     p.coneOuterAngle = 180;
     p.coneOuterGain = 0.4;
   });
 
-  // チャンネルスプリッター: synth の stereo 出力を L / R に分離
   splitter = audioCtx.createChannelSplitter(2);
   synth.connect(splitter);
-
-  // Lチャンネル -> pannerL, Rチャンネル -> pannerR
   splitter.connect(pannerL, 0);
   splitter.connect(pannerR, 1);
 
-  // マスターゲイン & コンプレッサー（音割れ防止）
   masterGain = audioCtx.createGain();
-  masterGain.gain.value = parseFloat(volSlider.value) / 100;
+  masterGain.gain.value = state.vol;
 
-  const compressor = audioCtx.createDynamicsCompressor();
-  compressor.threshold.value = -6;
-  compressor.knee.value = 6;
-  compressor.ratio.value = 8;
-  compressor.attack.value = 0.003;
-  compressor.release.value = 0.15;
-
+  const comp = audioCtx.createDynamicsCompressor();
   pannerL.connect(masterGain);
   pannerR.connect(masterGain);
-  masterGain.connect(compressor);
-  compressor.connect(audioCtx.destination);
+  masterGain.connect(comp);
+  comp.connect(audioCtx.destination);
 
-  // 音響シミュレーション位置を反映
-  applyAcousticSimulation();
+  applyAcoustics();
 
-  // 音量スライダー連動
-  volSlider.addEventListener('input', () => {
-    const v = parseFloat(volSlider.value) / 100;
-    volVal.textContent = `${volSlider.value}%`;
-    if (masterGain && audioCtx) {
-      masterGain.gain.setTargetAtTime(v, audioCtx.currentTime, 0.03);
-    }
-  });
-
-  // SoundFont のロード
   if (sfBuffer) {
-    setStatus('SoundFont をシンセに転送中…', 'warn');
+    dom.status.textContent = 'Uploading SoundFont to worklet...';
     await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
     await synth.isReady;
   }
 
-  // 鍵盤ビジュアル用イベント
-  synth.eventHandler.addEvent('noteOn', 'piano-visual-on', e => {
-    noteOn(e.midiNote, e.channel);
-  });
-  synth.eventHandler.addEvent('noteOff', 'piano-visual-off', e => {
-    noteOff(e.midiNote, e.channel);
-  });
+  synth.eventHandler.addEvent('noteOn', 'key-on', e => setKey(e.midiNote, true));
+  synth.eventHandler.addEvent('noteOff', 'key-off', e => setKey(e.midiNote, false));
 
-  // シーケンサー初期化
   sequencer = new Sequencer(synth);
-
-  sequencer.eventHandler.addEvent('songChange', 'seq-song-change', e => {
-    if (sequencer.duration > 0) {
-      currentDuration = sequencer.duration;
-      timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
-      setStatus(`再生準備完了: ${midiFileName || 'MIDI'} (${formatTime(currentDuration)})`, 'ok');
-    }
+  sequencer.eventHandler.addEvent('songChange', 'seq-change', () => {
+    duration = sequencer.duration;
+    dom.time.textContent = `0:00 / ${fmtTime(duration)}`;
+    dom.status.textContent = `Ready: ${midiFileName} (${fmtTime(duration)})`;
   });
+
+  dom.loader.classList.remove('show');
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SoundFont 読み込み (ファイル)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-$('sf-upload').addEventListener('change', async e => {
+function applyAcoustics() {
+  if (!audioCtx || !pannerL || !pannerR) return;
+  const now = audioCtx.currentTime;
+  const lx = (-state.spkDist / 2 - state.listenerOffset) / 100;
+  const rx = (state.spkDist / 2 - state.listenerOffset) / 100;
+  const z = -state.listenerDepth / 100;
+
+  if (state.acousticMode === 'hrtf') {
+    pannerL.panningModel = 'HRTF';
+    pannerR.panningModel = 'HRTF';
+    pannerL.positionX.setTargetAtTime(lx, now, 0.05);
+    pannerL.positionY.setTargetAtTime(0, now, 0.05);
+    pannerL.positionZ.setTargetAtTime(z, now, 0.05);
+    pannerR.positionX.setTargetAtTime(rx, now, 0.05);
+    pannerR.positionY.setTargetAtTime(0, now, 0.05);
+    pannerR.positionZ.setTargetAtTime(z, now, 0.05);
+
+    const rad = (state.toeIn * Math.PI) / 180;
+    pannerL.orientationX.setTargetAtTime(Math.sin(rad), now, 0.05);
+    pannerL.orientationZ.setTargetAtTime(Math.cos(rad), now, 0.05);
+    pannerR.orientationX.setTargetAtTime(Math.sin(-rad), now, 0.05);
+    pannerR.orientationZ.setTargetAtTime(Math.cos(-rad), now, 0.05);
+  } else {
+    pannerL.panningModel = 'equalpower';
+    pannerR.panningModel = 'equalpower';
+    pannerL.positionX.setTargetAtTime(Math.max(-1, Math.min(1, lx)), now, 0.05);
+    pannerR.positionX.setTargetAtTime(Math.max(-1, Math.min(1, rx)), now, 0.05);
+    pannerL.positionZ.setTargetAtTime(-1, now, 0.05);
+    pannerR.positionZ.setTargetAtTime(-1, now, 0.05);
+  }
+}
+
+const ctx = dom.canvas.getContext('2d');
+let cw = 0, ch = 0;
+function resizeCanvas() {
+  const r = dom.stageWrap.getBoundingClientRect();
+  cw = r.width;
+  ch = r.height;
+  dom.canvas.width = cw * window.devicePixelRatio;
+  dom.canvas.height = ch * window.devicePixelRatio;
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function toScreen(xCm, depthCm) {
+  const span = Math.max(state.spkDist, state.listenerDepth, 120) * 1.4;
+  const s = Math.min((cw - 60) / span, (ch - 60) / span);
+  return {
+    x: cw / 2 + xCm * s,
+    y: 50 + depthCm * s,
+    s
+  };
+}
+function toWorld(px, py) {
+  const span = Math.max(state.spkDist, state.listenerDepth, 120) * 1.4;
+  const s = Math.min((cw - 60) / span, (ch - 60) / span);
+  return {
+    xCm: (px - cw / 2) / s,
+    depthCm: (py - 50) / s
+  };
+}
+
+let dragTarget = null;
+dom.canvas.addEventListener('pointerdown', e => {
+  const rect = dom.canvas.getBoundingClientRect();
+  const px = e.clientX - rect.left;
+  const py = e.clientY - rect.top;
+  const spkL = toScreen(-state.spkDist / 2, 0);
+  const spkR = toScreen(state.spkDist / 2, 0);
+  const list = toScreen(state.listenerOffset, state.listenerDepth);
+
+  if (Math.hypot(px - spkL.x, py - spkL.y) < 20) dragTarget = 'spkL';
+  else if (Math.hypot(px - spkR.x, py - spkR.y) < 20) dragTarget = 'spkR';
+  else if (Math.hypot(px - list.x, py - list.y) < 20) dragTarget = 'list';
+
+  if (dragTarget) dom.canvas.setPointerCapture(e.pointerId);
+});
+
+dom.canvas.addEventListener('pointermove', e => {
+  if (!dragTarget) return;
+  const rect = dom.canvas.getBoundingClientRect();
+  const { xCm, depthCm } = toWorld(e.clientX - rect.left, e.clientY - rect.top);
+  if (dragTarget === 'spkL' || dragTarget === 'spkR') {
+    syncParam('spkDist', Math.max(15, Math.min(300, Math.abs(xCm) * 2)));
+  } else if (dragTarget === 'list') {
+    syncParam('listenerDepth', Math.max(15, Math.min(300, depthCm)));
+    syncParam('listenerOffset', Math.max(-100, Math.min(100, xCm)));
+  }
+});
+dom.canvas.addEventListener('pointerup', () => { dragTarget = null; });
+
+function drawStage() {
+  ctx.clearRect(0, 0, cw, ch);
+
+  const spkL = toScreen(-state.spkDist / 2, 0);
+  const spkR = toScreen(state.spkDist / 2, 0);
+  const list = toScreen(state.listenerOffset, state.listenerDepth);
+
+  // Lines
+  ctx.strokeStyle = '#222';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(spkL.x, spkL.y); ctx.lineTo(list.x, list.y);
+  ctx.moveTo(spkR.x, spkR.y); ctx.lineTo(list.x, list.y);
+  ctx.stroke();
+
+  // Dimension line
+  ctx.strokeStyle = '#444';
+  ctx.setLineDash([2, 2]);
+  ctx.beginPath();
+  ctx.moveTo(spkL.x, spkL.y - 18); ctx.lineTo(spkR.x, spkR.y - 18);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = '#888';
+  ctx.font = '10px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillText(`${state.spkDist.toFixed(1)} cm`, (spkL.x + spkR.x) / 2, spkL.y - 22);
+
+  // Speakers
+  function drawSpk(p, angle, lbl) {
+    ctx.save();
+    ctx.translate(p.x, p.y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 1.5;
+    ctx.strokeRect(-12, -8, 24, 16);
+    ctx.fillStyle = '#222';
+    ctx.beginPath();
+    ctx.arc(0, 0, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.fillStyle = '#bbb';
+    ctx.font = '10px sans-serif';
+    ctx.fillText(lbl, p.x, p.y + 18);
+  }
+  const toeRad = (state.toeIn * Math.PI) / 180;
+  drawSpk(spkL, -toeRad, 'L');
+  drawSpk(spkR, toeRad, 'R');
+
+  // Listener
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.arc(list.x, list.y, 8, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#888';
+  ctx.fillText(`${state.listenerDepth.toFixed(1)} cm`, list.x, list.y + 20);
+
+  requestAnimationFrame(drawStage);
+}
+requestAnimationFrame(drawStage);
+
+function syncParam(key, val) {
+  state[key] = Math.round(val * 10) / 10;
+  if (key === 'spkDist') { dom.spkDist.value = state[key]; dom.spkDistN.value = state[key]; }
+  if (key === 'listenerDepth') { dom.listDepth.value = state[key]; dom.listDepthN.value = state[key]; }
+  if (key === 'listenerOffset') { dom.listX.value = state[key]; dom.listXN.value = state[key]; }
+  if (key === 'toeIn') { dom.toein.value = state[key]; dom.toeinN.value = state[key]; }
+  applyAcoustics();
+}
+
+dom.spkDist.oninput = e => syncParam('spkDist', +e.target.value);
+dom.spkDistN.onchange = e => syncParam('spkDist', +e.target.value);
+dom.listDepth.oninput = e => syncParam('listenerDepth', +e.target.value);
+dom.listDepthN.onchange = e => syncParam('listenerDepth', +e.target.value);
+dom.listX.oninput = e => syncParam('listenerOffset', +e.target.value);
+dom.listXN.onchange = e => syncParam('listenerOffset', +e.target.value);
+dom.toein.oninput = e => syncParam('toeIn', +e.target.value);
+dom.toeinN.onchange = e => syncParam('toeIn', +e.target.value);
+dom.mode.onchange = e => { state.acousticMode = e.target.value; applyAcoustics(); };
+
+document.getElementById('p-desktop').onclick = () => { syncParam('spkDist', 52); syncParam('listenerDepth', 50); syncParam('listenerOffset', 0); syncParam('toeIn', 15); };
+document.getElementById('p-studio').onclick = () => { syncParam('spkDist', 90); syncParam('listenerDepth', 90); syncParam('listenerOffset', 0); syncParam('toeIn', 30); };
+document.getElementById('p-piano').onclick = () => { syncParam('spkDist', 123); syncParam('listenerDepth', 45); syncParam('listenerOffset', 0); syncParam('toeIn', 10); };
+
+// Run-up / Run-down Sweep
+async function runSweep(asc) {
+  if (state.sweepActive) {
+    state.sweepCancel = true;
+    return;
+  }
+  await ensureAudio();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
+
+  state.sweepActive = true;
+  state.sweepCancel = false;
+  dom.runUp.textContent = asc ? '■ Stop' : '▲ Run Up';
+  dom.runDown.textContent = !asc ? '■ Stop' : '▼ Run Down';
+
+  const notes = asc ? [...WHITE_KEYS] : [...WHITE_KEYS].reverse();
+  const stepMs = 32;
+
+  for (let note of notes) {
+    if (state.sweepCancel) break;
+    synth.noteOn(0, note, 95);
+    setTimeout(() => synth.noteOff(0, note), stepMs * 2);
+    await new Promise(r => setTimeout(r, stepMs));
+  }
+
+  state.sweepActive = false;
+  state.sweepCancel = false;
+  dom.runUp.textContent = '▲ Run Up';
+  dom.runDown.textContent = '▼ Run Down';
+}
+
+dom.runUp.onclick = () => runSweep(true);
+dom.runDown.onclick = () => runSweep(false);
+
+dom.sfIn.onchange = async e => {
   const file = e.target.files[0];
   if (!file) return;
-  sfLoaderMsg.textContent = `${file.name} を読み込み中…`;
-  sfLoader.classList.add('show');
+  dom.loader.classList.add('show');
   try {
     sfBuffer = await file.arrayBuffer();
     if (synth) {
       await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
       await synth.isReady;
     }
-    setStatus(`SF 読込完了: ${file.name}`, 'ok');
-    updatePlayBtn();
+    dom.status.textContent = `SoundFont: ${file.name}`;
+    updateTransport();
   } catch (err) {
-    setStatus('SoundFont 読み込みエラー: ' + err.message, 'err');
+    dom.status.textContent = `SF Error: ${err.message}`;
   } finally {
-    sfLoader.classList.remove('show');
+    dom.loader.classList.remove('show');
   }
-});
+};
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  SoundFont 読み込み (デフォルト)
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-$('sf-default-btn').addEventListener('click', async () => {
-  const SF_URL = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2';
-  sfLoaderMsg.textContent = 'GeneralUser GS をダウンロード中… (約30MB / 初回のみ)';
-  sfLoader.classList.add('show');
-  setStatus('デフォルト SoundFont をダウンロード中…', 'warn');
+dom.sfDefault.onclick = async () => {
+  const url = 'https://raw.githubusercontent.com/ad-si/GeneralUser/master/GeneralUser.sf2';
+  dom.loader.classList.add('show');
+  dom.status.textContent = 'Downloading GeneralUser GS (~30MB)...';
   try {
-    const res = await fetch(SF_URL);
+    const res = await fetch(url);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     sfBuffer = await res.arrayBuffer();
     if (synth) {
       await synth.soundBankManager.addSoundBank(sfBuffer, 'main');
       await synth.isReady;
     }
-    setStatus('GeneralUser GS 読み込み完了', 'ok');
-    updatePlayBtn();
+    dom.status.textContent = 'SoundFont: GeneralUser GS';
+    updateTransport();
   } catch (err) {
-    setStatus('ダウンロード失敗: ' + err.message + ' — ローカルファイルをお試しください', 'err');
+    dom.status.textContent = `Download Error: ${err.message}`;
   } finally {
-    sfLoader.classList.remove('show');
+    dom.loader.classList.remove('show');
   }
-});
+};
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  MIDI ファイル読み込み
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-$('midi-upload').addEventListener('change', async e => {
+dom.midiIn.onchange = async e => {
   const file = e.target.files[0];
   if (!file) return;
   try {
     midiBuffer = await file.arrayBuffer();
     midiFileName = file.name;
-    seekWrap.classList.add('visible');
-    seekBar.value = 0;
-    timeLabel.textContent = '0:00 / --:--';
-
+    dom.seekWrap.classList.add('active');
+    dom.seek.value = 0;
+    dom.time.textContent = '0:00 / --:--';
     if (sequencer) {
       sequencer.loadNewSongList([{ binary: midiBuffer, fileName: midiFileName }]);
       if (sequencer.duration > 0) {
-        currentDuration = sequencer.duration;
-        timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
+        duration = sequencer.duration;
+        dom.time.textContent = `0:00 / ${fmtTime(duration)}`;
       }
     }
-
-    setStatus(`MIDI 読込完了: ${midiFileName}`, sfBuffer ? 'ok' : 'warn');
-    updatePlayBtn();
+    dom.status.textContent = `MIDI: ${midiFileName}`;
+    updateTransport();
   } catch (err) {
-    setStatus('MIDI 読み込みエラー: ' + err.message, 'err');
+    dom.status.textContent = `MIDI Error: ${err.message}`;
   }
-});
+};
 
-function updatePlayBtn() {
-  playBtn.disabled = !(sfBuffer && midiBuffer);
+function updateTransport() {
+  const hasSf = !!sfBuffer;
+  const hasMidi = !!midiBuffer;
+  dom.play.disabled = !(hasSf && hasMidi);
+  dom.runUp.disabled = !hasSf;
+  dom.runDown.disabled = !hasSf;
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  再生 / 一時停止 / 停止
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-playBtn.addEventListener('click', async () => {
+dom.play.onclick = async () => {
   if (!sfBuffer || !midiBuffer) return;
+  await ensureAudio();
+  if (audioCtx.state === 'suspended') await audioCtx.resume();
 
-  if (!synth) {
-    sfLoaderMsg.textContent = 'シンセを初期化中…';
-    sfLoader.classList.add('show');
-    try {
-      await initAudio();
-    } catch (err) {
-      setStatus('初期化エラー: ' + err.message, 'err');
-      sfLoader.classList.remove('show');
-      return;
-    }
-    sfLoader.classList.remove('show');
-  }
-
-  if (audioCtx.state === 'suspended') {
-    await audioCtx.resume();
-  }
-
-  if (isPaused && sequencer) {
+  if (state.isPaused && sequencer) {
     sequencer.play();
-    isPaused = false;
   } else {
-    allNotesOff();
+    clearKeys();
     sequencer.loadNewSongList([{ binary: midiBuffer, fileName: midiFileName }]);
-    sequencer.playbackRate = parseFloat(tempoSlider.value) / 100;
+    sequencer.playbackRate = state.tempo;
     sequencer.play();
   }
 
-  isPlaying = true;
-  isPaused = false;
-  setStatus(`再生中: ${midiFileName}`, 'play');
-  playBtn.disabled = true;
-  pauseBtn.disabled = false;
-  stopBtn.disabled = false;
+  state.isPlaying = true;
+  state.isPaused = false;
+  dom.play.disabled = true;
+  dom.pause.disabled = false;
+  dom.stop.disabled = false;
+  dom.status.textContent = `Playing: ${midiFileName}`;
 
-  startSeekUpdate();
-});
+  clearInterval(seekTimer);
+  seekTimer = setInterval(() => {
+    if (!sequencer) return;
+    const t = sequencer.currentHighResolutionTime ?? sequencer.currentTime ?? 0;
+    const d = sequencer.duration || duration;
+    if (d > 0) {
+      duration = d;
+      dom.seek.value = Math.min(1000, (t / d) * 1000);
+      dom.time.textContent = `${fmtTime(t)} / ${fmtTime(d)}`;
+      if (t >= d - 0.1 || sequencer.isFinished) stopPlayback();
+    }
+  }, 100);
+};
 
-pauseBtn.addEventListener('click', () => {
-  if (!sequencer || !isPlaying) return;
+dom.pause.onclick = () => {
+  if (!sequencer || !state.isPlaying) return;
   sequencer.pause();
-  isPlaying = false;
-  isPaused = true;
-  setStatus('一時停止中', 'warn');
-  playBtn.disabled = false;
-  pauseBtn.disabled = true;
-  stopSeekUpdate();
-  allNotesOff();
-});
+  state.isPlaying = false;
+  state.isPaused = true;
+  dom.play.disabled = false;
+  dom.pause.disabled = true;
+  dom.status.textContent = 'Paused';
+  clearInterval(seekTimer);
+  clearKeys();
+};
 
-stopBtn.addEventListener('click', () => {
-  stopPlayback();
-});
+dom.stop.onclick = () => stopPlayback();
 
 function stopPlayback() {
   if (sequencer) {
     sequencer.pause();
     sequencer.currentTime = 0;
   }
-  allNotesOff();
-  isPlaying = false;
-  isPaused = false;
-  playBtn.disabled = !(sfBuffer && midiBuffer);
-  pauseBtn.disabled = true;
-  stopBtn.disabled = true;
-  setStatus(midiFileName ? `停止: ${midiFileName}` : '停止中', sfBuffer ? 'ok' : '');
-  seekBar.value = 0;
-  timeLabel.textContent = `0:00 / ${formatTime(currentDuration)}`;
-  stopSeekUpdate();
+  clearKeys();
+  state.isPlaying = false;
+  state.isPaused = false;
+  dom.play.disabled = !(sfBuffer && midiBuffer);
+  dom.pause.disabled = true;
+  dom.stop.disabled = true;
+  dom.status.textContent = midiFileName ? `Stopped: ${midiFileName}` : 'Stopped';
+  dom.seek.value = 0;
+  dom.time.textContent = `0:00 / ${fmtTime(duration)}`;
+  clearInterval(seekTimer);
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  シークバー & テンポ
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-seekBar.addEventListener('input', () => {
-  if (!sequencer || currentDuration <= 0) return;
-  const targetTime = (parseFloat(seekBar.value) / 1000) * currentDuration;
-  sequencer.currentTime = targetTime;
-  timeLabel.textContent = `${formatTime(targetTime)} / ${formatTime(currentDuration)}`;
-  allNotesOff();
-});
+dom.seek.oninput = () => {
+  if (!sequencer || duration <= 0) return;
+  const t = (parseFloat(dom.seek.value) / 1000) * duration;
+  sequencer.currentTime = t;
+  dom.time.textContent = `${fmtTime(t)} / ${fmtTime(duration)}`;
+  clearKeys();
+};
 
-function startSeekUpdate() {
-  stopSeekUpdate();
-  seekTimer = setInterval(() => {
-    if (!sequencer) return;
-    const curTime = sequencer.currentHighResolutionTime ?? sequencer.currentTime ?? 0;
-    const d = sequencer.duration || currentDuration;
-    if (d > 0) {
-      currentDuration = d;
-      seekBar.value = Math.min(1000, (curTime / d) * 1000);
-      timeLabel.textContent = `${formatTime(curTime)} / ${formatTime(d)}`;
-
-      if (curTime >= d - 0.1 || sequencer.isFinished) {
-        stopPlayback();
-      }
-    }
-  }, 100);
-}
-
-function stopSeekUpdate() {
-  if (seekTimer) {
-    clearInterval(seekTimer);
-    seekTimer = null;
+dom.vol.oninput = e => {
+  state.vol = parseFloat(e.target.value) / 100;
+  dom.volTxt.textContent = `${e.target.value}%`;
+  if (masterGain && audioCtx) {
+    masterGain.gain.setTargetAtTime(state.vol, audioCtx.currentTime, 0.03);
   }
-}
+};
 
-tempoSlider.addEventListener('input', () => {
-  const rate = parseFloat(tempoSlider.value) / 100;
-  tempoVal.textContent = `${tempoSlider.value}%`;
-  if (sequencer) sequencer.playbackRate = rate;
-});
+dom.tempo.oninput = e => {
+  state.tempo = parseFloat(e.target.value) / 100;
+  dom.tempoTxt.textContent = `${e.target.value}%`;
+  if (sequencer) sequencer.playbackRate = state.tempo;
+};
 
-function formatTime(sec) {
+function fmtTime(sec) {
   if (!isFinite(sec) || sec <= 0) return '0:00';
   const s = Math.floor(sec);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
