@@ -1,55 +1,236 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ファイル一覧</title>
-<style>
-  body {
-    font-family: system-ui, -apple-system, "Hiragino Sans", "Yu Gothic UI", sans-serif;
-    background: #15171c;
-    color: #eceef3;
-    margin: 0;
-    padding: 40px 24px;
-  }
-  h1 { font-size: 20px; margin: 0 0 8px; }
-  p.updated { font-size: 12px; color: #8c95a6; margin: 0 0 28px; }
-  ul {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-    max-width: 480px;
-  }
-  li a {
-    display: block;
-    background: #20242c;
-    border: 1px solid #323845;
-    border-radius: 10px;
-    padding: 12px 16px;
-    color: #4da3ff;
-    text-decoration: none;
-    font-size: 15px;
-    transition: border-color .15s;
-  }
-  li a:hover { border-color: #4da3ff; }
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pondashi — Tools Index</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #fff;
+      color: #000;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      padding: 24px;
+      display: flex;
+      justify-content: center;
+    }
+    .app {
+      width: 100%;
+      max-width: 960px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .panel {
+      background: #fff;
+      border: 1px solid #000;
+      padding: 14px 16px;
+    }
+    .panel-header {
+      font-size: 12px;
+      font-weight: 700;
+      color: #000;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .header-row {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: flex-end;
+      gap: 12px;
+    }
+    h1 {
+      font-size: 18px;
+      font-weight: 700;
+      color: #000;
+      letter-spacing: -0.01em;
+    }
+    .val-display {
+      font-size: 12px;
+      color: #000;
+      font-variant-numeric: tabular-nums;
+    }
+    .search-wrap {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    label {
+      font-size: 12px;
+      color: #000;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+    input[type=text] {
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      font: inherit;
+      font-size: 12px;
+      padding: 5px 8px;
+      width: 220px;
+      outline: none;
+    }
+    input[type=text]:focus {
+      background: #f5f5f5;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: #fff;
+      color: #000;
+      border: 1px solid #000;
+      padding: 14px 16px;
+      text-decoration: none;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      transition: background 0.12s, color 0.12s;
+      cursor: pointer;
+    }
+    .card:hover {
+      background: #000;
+      color: #fff;
+    }
+    .card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
+    .card-file {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 11px;
+      border: 1px solid currentColor;
+      padding: 2px 6px;
+    }
+    .card-arrow {
+      font-size: 14px;
+      font-weight: 700;
+      transition: transform 0.12s;
+    }
+    .card:hover .card-arrow {
+      transform: translateX(3px);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+      line-height: 1.35;
+    }
+    .card-desc {
+      font-size: 12px;
+      line-height: 1.5;
+      opacity: 0.85;
+      word-break: break-word;
+    }
+    .card-desc.empty {
+      opacity: 0.4;
+      font-style: italic;
+    }
+    .footer-panel {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #000;
+      font-variant-numeric: tabular-nums;
+    }
+    @media (max-width: 600px) {
+      body { padding: 16px; }
+      .grid { grid-template-columns: 1fr; }
+      input[type=text] { width: 100%; }
+      .header-row { flex-direction: column; align-items: stretch; }
+    }
+  </style>
 </head>
 <body>
-<h1>ファイル一覧</h1>
-<<<<<<< HEAD
-<p class="updated">最終更新: 2026-11-02 13:28 UTC</p>
-=======
-<p class="updated">最終更新: 2026-10-31 05:52 UTC</p>
->>>>>>> 4366be21500ed6d7793973f39743c1744663884b
-<ul>
-      <li><a href="fontcross.html">fontcross.html</a></li>
-      <li><a href="osint.html">osint.html</a></li>
-      <li><a href="playMIDI.html">playMIDI.html</a></li>
-      <li><a href="pondashi.html">pondashi.html</a></li>
-      <li><a href="remove.bg.html">remove.bg.html</a></li>
-</ul>
+<div class="app">
+  <div class="panel">
+    <div class="panel-header">
+      <span>REPOSITORY DIRECTORY</span>
+      <span class="val-display">5 FILES</span>
+    </div>
+    <div class="header-row">
+      <div>
+        <h1>Pondashi Web Tools</h1>
+      </div>
+      <div class="search-wrap">
+        <label for="search">Filter:</label>
+        <input type="text" id="search" placeholder="Search by name or keyword..." autocomplete="off">
+      </div>
+    </div>
+  </div>
+
+  <div class="grid" id="cardGrid">
+    <a class="card" href="fontcross.html">
+      <div class="card-top">
+        <span class="card-file">fontcross.html</span>
+        <span class="card-arrow">&rarr;</span>
+      </div>
+      <div class="card-title">Font Crosshatch Converter</div>
+      <p class="card-desc">フォント（OTF/TTF）を読み込み、漢字・かな・記号グリフを密度グラデーションのクロスハッチ（網掛け）に変換して新しいOTFとして書き出すツール。</p>
+    </a>
+    <a class="card" href="osint.html">
+      <div class="card-top">
+        <span class="card-file">osint.html</span>
+        <span class="card-arrow">&rarr;</span>
+      </div>
+      <div class="card-title">Google検索クエリ組み立て</div>
+      <p class="card-desc">各種検索演算子（site:, filetype:等）の組み合わせや一括ターゲット検索リンク化ができる、動物系OSINTプリセット付きのGoogle検索クエリビルダー。</p>
+    </a>
+    <a class="card" href="playMIDI.html">
+      <div class="card-top">
+        <span class="card-file">playMIDI.html</span>
+        <span class="card-arrow">&rarr;</span>
+      </div>
+      <div class="card-title">MIDI Player</div>
+      <p class="card-desc">SpessaSynthを活用したWeb MIDIプレイヤー。2Dスピーカー音響モデリング（距離・角度・到達遅延）やグリッサンド自動演奏、最大1000%音量ブーストを搭載。</p>
+    </a>
+    <a class="card" href="pondashi.html">
+      <div class="card-top">
+        <span class="card-file">pondashi.html</span>
+        <span class="card-arrow">&rarr;</span>
+      </div>
+      <div class="card-title">ポン出しパッド</div>
+      <p class="card-desc">タイマー・時計表示、リンク再生（ダッキング・クロスフェード）、ローカルフォルダ保存や持ち出し用ZIP書き出しに対応したポン出しパッド。</p>
+    </a>
+    <a class="card" href="remove.bg.html">
+      <div class="card-top">
+        <span class="card-file">remove.bg.html</span>
+        <span class="card-arrow">&rarr;</span>
+      </div>
+      <div class="card-title">勾配マスク 高精度版</div>
+      <p class="card-desc">Lab色空間の輪郭勾配検出と境界精密化（エッジの色染み除去など）により、ブラウザ完結で高精度な背景切り抜きPNGを生成する画像処理ツール。</p>
+    </a>
+  </div>
+
+  <div class="panel footer-panel">
+    <span>INDEX GENERATED</span>
+    <span>2026-11-03 04:18 UTC</span>
+  </div>
+</div>
+
+<script>
+  const searchInput = document.getElementById('search');
+  const cards = document.querySelectorAll('.card');
+
+  searchInput.addEventListener('input', (e) => {
+    const query = e.target.value.toLowerCase().trim();
+    cards.forEach(card => {
+      const text = card.textContent.toLowerCase();
+      card.style.display = text.includes(query) ? '' : 'none';
+    });
+  });
+</script>
 </body>
 </html>

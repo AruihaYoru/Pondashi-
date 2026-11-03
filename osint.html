@@ -3,79 +3,250 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="各種検索演算子（site:, filetype:等）の組み合わせや一括ターゲット検索リンク化ができる、動物系OSINTプリセット付きのGoogle検索クエリビルダー。">
 <meta name="color-scheme" content="only light">
 <title>Google検索クエリ組み立て</title>
 <style>
-:root, :root[data-theme] { color-scheme: only light !important; box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
-html, body { background: #fff !important; color: #000 !important; }
-input, select, textarea, button { background: #fff !important; color: #000 !important; }
-a { color: #00e !important; }
-body { max-width: 940px; margin: 0; padding: 6px 10px; }
-table { width: 100%; border-collapse: collapse; }
-td { padding: 1px 4px 1px 0; vertical-align: top; }
-td.l { white-space: nowrap; width: 1%; }
-input[type=text], textarea, select { width: 100%; box-sizing: border-box; }
-textarea { font-family: monospace; }
-.g { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 3px; align-items: center; }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #fff;
+  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+}
+.app {
+  width: 100%;
+  max-width: 960px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #000;
+}
+h2 {
+  font-size: 13px;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  letter-spacing: 0.05em;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 14px 16px;
+}
+.panel-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+p.note {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-top: 6px;
+}
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: center;
+}
+input, select, textarea, button {
+  background: #fff;
+  color: #000;
+  border: 1px solid #000;
+  font: inherit;
+  font-size: 12px;
+}
+input[type=text], input[type=date], select {
+  padding: 5px 8px;
+}
+textarea {
+  width: 100%;
+  padding: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  resize: vertical;
+}
+button {
+  padding: 5px 12px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.1s, color 0.1s;
+}
+button:hover:not(:disabled) {
+  background: #000;
+  color: #fff;
+}
+button.btn-strong {
+  background: #000;
+  color: #fff;
+}
+button.btn-strong:hover {
+  background: #fff;
+  color: #000;
+}
+a {
+  color: #000;
+  text-decoration: underline;
+}
+a:hover {
+  background: #000;
+  color: #fff;
+  text-decoration: none;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+td {
+  padding: 4px 6px;
+  vertical-align: middle;
+}
+td.l {
+  white-space: nowrap;
+  width: 25%;
+  font-size: 12px;
+  font-weight: 600;
+}
+.g {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+  padding: 8px 0;
+  border-bottom: 1px solid #ddd;
+  align-items: center;
+}
 .g select { width: auto; }
 .g input[type=text] { flex: 1 1 200px; min-width: 0; }
-.g span { white-space: nowrap; }
-.cb { display: block; }
-details { margin-top: 8px; }
+.g span { white-space: nowrap; font-size: 12px; font-weight: 600; }
+.cb {
+  display: block;
+  font-size: 12px;
+  margin: 4px 0;
+}
+details {
+  border: 1px solid #000;
+  padding: 10px 14px;
+  background: #fff;
+}
+details + details {
+  margin-top: 8px;
+}
+summary {
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+#msg {
+  font-size: 12px;
+  margin-left: 8px;
+  font-weight: 700;
+}
+ul#explain, ol#bulk, ul#hist {
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
 </style>
 </head>
 <body>
+<div class="app">
+  <div class="panel">
+    <div class="panel-header">
+      <span>OSINT SEARCH TOOL</span>
+      <span>QUERY BUILDER</span>
+    </div>
+    <h1>Google検索クエリ組み立て</h1>
+    <p class="note">
+      ぶっちゃけ一番面白かったのはどっかの時点で動物系OSINT調査になっちまったことや<br>
+      文句はClaude Haikuに言ってくれ
+    </p>
+  </div>
 
-<h1>Google検索クエリ組み立て</h1>
-<p>
-  ぶっちゃけ一番面白かったのはどっかの時点で動物系OSINT調査になっちまったことや
-  <br>文句はClaude Haikuに言ってくれ
-</p>
+  <div class="panel">
+    <div class="panel-header">
+      <span>QUERY CONDITIONS</span>
+    </div>
+    <div id="groups"></div>
+    <p style="margin-top: 10px;">
+      <button type="button" id="gadd">+ 行を追加</button>
+      <button type="button" id="gaddx">+ 除外の行を追加</button>
+    </p>
+    <div class="row" style="margin-top: 12px; font-size: 12px;">
+      <span style="font-weight: 700;">期間指定:</span>
+      <input type="date" id="after"> 〜 <input type="date" id="before">
+      <span style="color: #666;">(空欄なら指定なし)</span>
+    </div>
+  </div>
 
-<div id="groups"></div>
-<p><button type="button" id="gadd">+ 行を追加</button> <button type="button" id="gaddx">+ 除外の行を追加</button></p>
+  <div class="panel">
+    <div class="panel-header">
+      <span>OUTPUT RESULT</span>
+    </div>
+    <h2>できあがり</h2>
+    <textarea id="out" rows="3" readonly></textarea>
+    <p class="row" style="margin-top: 10px;">
+      <button type="button" id="open" class="btn-strong">Googleで検索</button>
+      <button type="button" id="copy">クエリをコピー</button>
+      <button type="button" id="copyurl">URLをコピー</button>
+      <button type="button" id="save">履歴に保存</button>
+      <button type="button" id="clear">全部クリア</button>
+      <span id="msg"></span>
+    </p>
+    <p style="margin-top: 12px; font-size: 12px; font-weight: 700;">意味の解説:</p>
+    <ul id="explain"></ul>
+  </div>
 
-<p>期間: <input type="date" id="after"> 〜 <input type="date" id="before"> (空欄なら指定なし)</p>
+  <div class="panel">
+    <div class="panel-header">
+      <span>ADVANCED OPTIONS</span>
+    </div>
+    <details>
+      <summary>検索の詳細設定 (パラメータ・演算子)</summary>
+      <table id="pt" style="margin-top: 10px;"></table>
+      <div id="cbs" style="margin-top: 10px;"></div>
+    </details>
 
-<h2>できあがり</h2>
-<textarea id="out" rows="2" readonly></textarea>
-<p>
-<button type="button" id="open">Googleで検索</button>
-<button type="button" id="copy">クエリをコピー</button>
-<button type="button" id="copyurl">URLをコピー</button>
-<button type="button" id="save">履歴に保存</button>
-<button type="button" id="clear">全部クリア</button>
-<span id="msg"></span>
-</p>
-<p>意味:</p>
-<ul id="explain"></ul>
+    <details>
+      <summary>検索URL (直接アクセス用)</summary>
+      <textarea id="urlout" rows="3" readonly style="margin-top: 8px;"></textarea>
+    </details>
 
-<details>
-<summary>検索の詳細設定</summary>
-<table id="pt"></table>
-<div id="cbs"></div>
-</details>
+    <details>
+      <summary>複数ターゲットを一括で検索リンク化</summary>
+      <p class="note" style="margin-top: 6px;">上のクエリ内の <code>{}</code> を、下の1行ごとに置き換えたリンクを作ります。<code>{}</code> が無ければ末尾に "行の内容" を追加します。</p>
+      <textarea id="targets" rows="4" placeholder="1行に1つずつ入力&#10;例:&#10;ポチ&#10;タマ&#10;シロ" style="margin-top: 8px;"></textarea>
+      <ol id="bulk" style="margin: 8px 0;"></ol>
+      <button type="button" id="bcopy">一括クエリをコピー</button>
+    </details>
 
-<details>
-<summary>URL</summary>
-<textarea id="urlout" rows="3" readonly></textarea>
-</details>
-
-<details>
-<summary>複数ターゲットを一括で検索リンク化</summary>
-<p>上のクエリ内の <code>{}</code> を、下の1行ごとに置き換えたリンクを作ります。<code>{}</code> が無ければ末尾に "行の内容" を追加します。</p>
-<textarea id="targets" rows="4" placeholder="1行に1つずつ入力&#10;例:&#10;ポチ&#10;タマ&#10;シロ"></textarea>
-<ol id="bulk"></ol>
-<button type="button" id="bcopy">一括クエリをコピー</button>
-</details>
-
-<details>
-<summary id="hsum">履歴 (0)</summary>
-<ul id="hist"></ul>
-<button type="button" id="hexp">履歴のクエリをテキスト化</button>
-<textarea id="hbox" rows="3" style="display:none"></textarea>
-</details>
-
+    <details>
+      <summary id="hsum">履歴 (0)</summary>
+      <ul id="hist" style="margin-top: 8px;"></ul>
+      <p style="margin-top: 8px;">
+        <button type="button" id="hexp">履歴のクエリをテキスト化</button>
+      </p>
+      <textarea id="hbox" rows="3" style="display:none; margin-top: 8px;"></textarea>
+    </details>
+  </div>
+</div>
 <script>
 (function () {
   var root = document.documentElement;

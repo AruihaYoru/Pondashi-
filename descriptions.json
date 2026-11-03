@@ -1,0 +1,22 @@
+{
+  "fontcross.html": {
+    "title": "Font Crosshatch Converter",
+    "description": "フォント（OTF/TTF）を読み込み、漢字・かな・記号グリフを密度グラデーションのクロスハッチ（網掛け）に変換して新しいOTFとして書き出すツール。"
+  },
+  "osint.html": {
+    "title": "Google検索クエリ組み立て",
+    "description": "各種検索演算子（site:, filetype:等）の組み合わせや一括ターゲット検索リンク化ができる、動物系OSINTプリセット付きのGoogle検索クエリビルダー。"
+  },
+  "playMIDI.html": {
+    "title": "MIDI Player",
+    "description": "SpessaSynthを活用したWeb MIDIプレイヤー。2Dスピーカー音響モデリング（距離・角度・到達遅延）やグリッサンド自動演奏、最大1000%音量ブーストを搭載。"
+  },
+  "pondashi.html": {
+    "title": "ポン出しパッド",
+    "description": "タイマー・時計表示、リンク再生（ダッキング・クロスフェード）、ローカルフォルダ保存や持ち出し用ZIP書き出しに対応したポン出しパッド。"
+  },
+  "remove.bg.html": {
+    "title": "勾配マスク 高精度版",
+    "description": "Lab色空間の輪郭勾配検出と境界精密化（エッジの色染み除去など）により、ブラウザ完結で高精度な背景切り抜きPNGを生成する画像処理ツール。"
+  }
+}

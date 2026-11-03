@@ -3,154 +3,506 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="タイマー・時計表示、リンク再生（ダッキング・クロスフェード）、ローカルフォルダ保存や持ち出し用ZIP書き出しに対応したポン出しパッド。">
 <title>ポン出しパッド</title>
 <style>
-:root{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f4f5f8;--panel:#ffffff;--line:#d8dce5;--text:#1b1e25;--sub:#6b7280;--acc:#2563eb}}
-:root[data-theme="dark"]{--bg:#15171c;--panel:#20242c;--line:#323845;--text:#eceef3;--sub:#8c95a6;--acc:#4da3ff}
-*{box-sizing:border-box}
-html,body{margin:0}
-body{background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif;min-height:100vh;padding:env(safe-area-inset-top,0px) env(safe-area-inset-right,0px) env(safe-area-inset-bottom,0px)}
-header{display:flex;align-items:center;flex-wrap:wrap;gap:10px 14px;padding:14px 16px;border-bottom:1px solid var(--line)}
-h1{font-size:18px;margin:0 auto 0 0}
-label.ctl{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--sub)}
-button,input[type=text],input[type=number]{font:inherit;color:var(--text);background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:7px 12px}
-button{cursor:pointer}
-button:hover{border-color:var(--acc)}
-.danger{color:#e5484d}
-.sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
-.bar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;padding:10px 16px;border-bottom:1px solid var(--line)}
-#now{font-size:22px;font-weight:700;font-variant-numeric:tabular-nums}
-.tm{display:flex;flex-wrap:wrap;align-items:center;gap:8px;font-size:13px;color:var(--sub)}
-.tm input{width:64px;padding:6px 8px}
-#tmD{font-size:26px;font-weight:700;color:var(--text);font-variant-numeric:tabular-nums;min-width:4.5ch}
-.layout{display:grid;gap:16px;padding:16px;max-width:1040px;margin:0 auto;align-items:start}
-@media(min-width:760px){.layout{grid-template-columns:1fr 300px}}
-#grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}
-.pad{position:relative;aspect-ratio:1;border-radius:16px;background:var(--c,var(--panel));border:2px solid var(--line);color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:8px 8px 34px;text-align:center;cursor:pointer;user-select:none;-webkit-user-select:none;touch-action:manipulation;transition:transform .06s,box-shadow .12s;overflow:hidden}
-.pad.full{color:#fff;border-color:transparent}
-.pad.lt{color:#1b1e25}
-.pad.lt .btns button{color:#1b1e25;background:rgba(255,255,255,.5)}
-.pad.lt .btns button:hover{background:rgba(255,255,255,.75)}
-.pad:active{transform:scale(.97)}
-.pad.on{box-shadow:0 0 0 3px var(--acc),0 0 18px var(--acc)}
-.pad.sel{outline:2px solid var(--acc);outline-offset:3px}
-.pad .nm{font-weight:600;font-size:14px;line-height:1.25;overflow-wrap:anywhere;max-height:2.5em;overflow:hidden}
-.pad .sb{font-size:11px;opacity:.85;margin-top:4px;overflow-wrap:anywhere;max-height:2.2em;overflow:hidden}
-.pad .ky{position:absolute;top:6px;left:8px;font-size:11px;opacity:.7;font-family:monospace}
-.pad .rem{position:absolute;top:6px;right:8px;font-size:11px;font-family:monospace;font-weight:700;opacity:.95}
-.btns{position:absolute;left:6px;right:6px;bottom:6px;display:flex;gap:4px}
-.btns button{flex:1;font-size:13px;line-height:1;padding:6px 0;background:rgba(0,0,0,.25);border:0;color:#fff;border-radius:6px}
-.btns button:hover{border:0;background:rgba(0,0,0,.4)}
-.pad:not(.full) .btns button{color:var(--text);background:var(--line)}
-.addpad{aspect-ratio:1;border:2px dashed var(--line);background:transparent;border-radius:16px;color:var(--sub);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;font-size:13px}
-.addpad b{font-size:30px;line-height:1;font-weight:400}
-aside{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px}
-aside h2{font-size:15px;margin:0 0 4px}
-aside .sub{font-size:12px;color:var(--sub);margin-bottom:6px}
-aside label{display:block;font-size:13px;color:var(--sub);margin:12px 0 6px}
-aside input[type=text],aside input[type=number],aside input[type=file]{width:100%}
-aside input[type=checkbox]{accent-color:var(--acc)}
-.two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.sw{display:flex;gap:6px;flex-wrap:wrap}
-.sw button{width:26px;height:26px;padding:0;border-radius:50%;border:3px solid transparent;box-shadow:inset 0 0 0 1px rgba(128,128,128,.45)}
-.cc{display:flex!important;align-items:center;gap:8px}
-.cc input{width:44px;height:30px;padding:0;border:1px solid var(--line);border-radius:6px;background:var(--panel);cursor:pointer}
-.sw button.sel{border-color:var(--text)}
-#fn{font-size:12px;color:var(--sub);margin-top:6px;overflow-wrap:anywhere}
-.clrbtn{margin-top:14px;width:100%}
-.clrbtn+.clrbtn{margin-top:8px}
-.khead{display:flex;align-items:center;justify-content:space-between;margin:16px 0 4px;font-size:14px;font-weight:600}
-.khead button{padding:3px 10px;font-size:12px;font-weight:400}
-.khelp{font-size:11px;color:var(--sub);line-height:1.5}
-.lkrow{position:relative;border:1px solid var(--line);border-left:5px solid var(--sub);border-radius:10px;padding:8px 10px;margin-top:8px}
-.lkrow small{display:block;font-size:11px;color:var(--sub);margin:6px 0 3px}
-.lkrow select{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 8px}
-.lkrow .khelp{margin-top:6px}
-.lkx{position:absolute;top:4px;right:6px;padding:0 8px;font-size:16px;line-height:1.4}
-.lkrow[data-a=stop]{border-left-color:#e5484d}.lkrow[data-a=xf]{border-left-color:#d97b00}.lkrow[data-a=cut]{border-left-color:#8f3b3f}
-.lkrow[data-a=with]{border-left-color:#30a46c}.lkrow[data-a=next]{border-left-color:#6e56cf}.lkrow[data-a=duck]{border-left-color:#0090ff}
-#toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--text);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:88vw;text-align:center}
-#toast.show{opacity:1}
-.hint{font-size:12px;color:var(--sub);text-align:center;padding:0 16px 24px;line-height:1.7}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: #fff;
+  color: #000;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  padding: 24px;
+  display: flex;
+  justify-content: center;
+}
+.app {
+  width: 100%;
+  max-width: 1080px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+h1 {
+  font-size: 16px;
+  font-weight: 700;
+  color: #000;
+}
+.panel {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 14px 16px;
+}
+.panel-header {
+  font-size: 12px;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+header.header-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+}
+label.ctl {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+}
+input[type=range] {
+  accent-color: #000;
+  cursor: pointer;
+}
+button, input[type=text], input[type=number] {
+  font: inherit;
+  font-size: 12px;
+  color: #000;
+  background: #fff;
+  border: 1px solid #000;
+  padding: 5px 10px;
+}
+button {
+  cursor: pointer;
+  font-weight: 600;
+  transition: background 0.1s, color 0.1s;
+}
+button:hover:not(:disabled) {
+  background: #000;
+  color: #fff;
+}
+.btn-strong {
+  background: #000;
+  color: #fff;
+}
+.btn-strong:hover {
+  background: #fff;
+  color: #000;
+}
+.sep {
+  width: 1px;
+  align-self: stretch;
+  background: #000;
+  margin: 0 4px;
+}
+.timer-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 24px;
+  padding: 10px 14px;
+  border: 1px solid #000;
+  background: #fff;
+}
+#now {
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.05em;
+}
+.tm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+.tm input {
+  width: 54px;
+  text-align: right;
+  padding: 4px 6px;
+}
+#tmD {
+  font-size: 24px;
+  font-weight: 700;
+  color: #000;
+  font-variant-numeric: tabular-nums;
+  min-width: 4.5ch;
+  margin-left: 8px;
+}
+.layout {
+  display: grid;
+  gap: 16px;
+  align-items: start;
+}
+@media (min-width: 760px) {
+  .layout { grid-template-columns: 1fr 310px; }
+}
+#grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+@media (max-width: 500px) {
+  #grid { grid-template-columns: repeat(2, 1fr); }
+}
+.pad {
+  position: relative;
+  aspect-ratio: 1;
+  background: var(--c, #fff);
+  border: 1px solid #000;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 8px 34px;
+  text-align: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  overflow: hidden;
+  transition: transform 0.06s;
+}
+.pad:active {
+  transform: scale(0.98);
+}
+.pad.on {
+  background: #000 !important;
+  color: #fff !important;
+  outline: 2px solid #000;
+}
+.pad.on .ky, .pad.on .rem, .pad.on .nm, .pad.on .sb {
+  color: #fff !important;
+}
+.pad.on .btns button {
+  background: #000;
+  color: #fff;
+  border-color: #fff;
+}
+.pad.on .btns button:hover {
+  background: #fff;
+  color: #000;
+}
+.pad.sel {
+  outline: 2px solid #000;
+  outline-offset: 3px;
+}
+.pad .nm {
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+  max-height: 2.5em;
+  overflow: hidden;
+}
+.pad .sb {
+  font-size: 11px;
+  opacity: 0.8;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+  max-height: 2.2em;
+  overflow: hidden;
+}
+.pad .ky {
+  position: absolute;
+  top: 6px;
+  left: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+}
+.pad .rem {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.btns {
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  bottom: 6px;
+  display: flex;
+  gap: 4px;
+}
+.btns button {
+  flex: 1;
+  font-size: 11px;
+  line-height: 1;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #000;
+  color: #000;
+}
+.btns button:hover {
+  background: #000;
+  color: #fff;
+}
+.addpad {
+  aspect-ratio: 1;
+  border: 1px dashed #000;
+  background: #fff;
+  color: #000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.addpad:hover {
+  background: #000;
+  color: #fff;
+}
+.addpad b {
+  font-size: 24px;
+  line-height: 1;
+  font-weight: 700;
+}
+aside {
+  background: #fff;
+  border: 1px solid #000;
+  padding: 14px 16px;
+}
+aside h2 {
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 2px;
+}
+aside .sub {
+  font-size: 11px;
+  color: #666;
+  margin-bottom: 10px;
+}
+aside label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  margin: 10px 0 4px;
+  text-transform: uppercase;
+}
+aside input[type=text], aside input[type=number], aside input[type=file] {
+  width: 100%;
+}
+aside input[type=checkbox] {
+  accent-color: #000;
+}
+.two {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.sw {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+.sw button {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid #000;
+  cursor: pointer;
+}
+.sw button.sel {
+  outline: 2px solid #000;
+  outline-offset: 1px;
+}
+.cc {
+  display: flex !important;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.cc input {
+  width: 38px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid #000;
+  background: #fff;
+  cursor: pointer;
+}
+#fn {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+  word-break: break-all;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+.clrbtn {
+  margin-top: 10px;
+  width: 100%;
+}
+.khead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 14px 0 4px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.khead button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.khelp {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.4;
+}
+.lkrow {
+  position: relative;
+  border: 1px solid #000;
+  padding: 6px 8px;
+  margin-top: 6px;
+  background: #fff;
+}
+.lkrow small {
+  display: block;
+  font-size: 10px;
+  color: #666;
+  margin: 4px 0 2px;
+}
+.lkrow select {
+  width: 100%;
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid #000;
+  background: #fff;
+}
+.lkx {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  padding: 0 6px;
+  font-size: 14px;
+  line-height: 1;
+}
+#toast {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  background: #000;
+  color: #fff;
+  border: 1px solid #000;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  opacity: 0;
+  transition: opacity 0.15s;
+  pointer-events: none;
+  max-width: 90vw;
+  text-align: center;
+  z-index: 1000;
+}
+#toast.show { opacity: 1; }
+.hint {
+  font-size: 11px;
+  color: #666;
+  line-height: 1.6;
+  border: 1px solid #000;
+  padding: 12px 14px;
+  background: #fff;
+}
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 </head>
 <body>
-<header>
-  <h1>ポン出しパッド</h1>
-  <label class="ctl">音量 <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
-  <button id="stopAll">■ 全停止</button>
-  <div class="sep"></div>
-  <button id="fsSave" title="選択したフォルダに設定と音声を個別ファイルで保存">📁 フォルダ保存</button>
-  <button id="fsLoad" title="フォルダから設定と音声を読み込み（無いファイルは一覧表示）">📂 フォルダ読込</button>
-  <button id="expZip" title="設定と音声ファイル本体をZIPにまとめてダウンロード（他PCへの持ち出し用）">📦 ZIP書き出し</button>
-  <button id="impZip" title="ZIPから設定と音声を復元">📦 ZIP読み込み</button>
-  <input type="file" id="impFile" accept=".zip,application/zip" hidden>
-  <div class="sep"></div>
-  <button id="reset" class="danger">全消去</button>
-</header>
-<div class="bar">
-  <div id="now">--:--:--</div>
-  <div class="tm">
-    <input type="number" id="tmM" min="0" max="999" value="5" inputmode="numeric">分
-    <input type="number" id="tmS" min="0" max="59" value="0" inputmode="numeric">秒
-    <span id="tmD">05:00</span>
-    <button id="tmGo">開始</button><button id="tmRs">リセット</button>
-  </div>
-</div>
-
-<div class="layout">
-  <div id="grid"></div>
-
-  <aside id="pp">
-    <h2 id="ppt">パッド</h2>
-    <div class="sub" id="pps">パッドの ⚙ で選択</div>
-
-    <label for="nm">名前</label>
-    <input type="text" id="nm" maxlength="30" placeholder="例: 拍手">
-
-    <label>色</label>
-    <div class="sw" id="sw"></div>
-    <label class="cc">好きな色 <input type="color" id="cc" value="#4da3ff"></label>
-
-    <label for="pv">音量</label>
-    <input type="range" id="pv" min="0" max="1" step="0.01">
-
-    <label><input type="checkbox" id="lp"> ループ再生</label>
-
-    <div class="two">
-      <div><label for="fi">フェードイン（秒）</label><input type="number" id="fi" min="0" max="30" step="0.01" inputmode="decimal"></div>
-      <div><label for="fo">フェードアウト（秒）</label><input type="number" id="fo" min="0" max="30" step="0.01" inputmode="decimal"></div>
+<div class="app">
+  <div class="panel">
+    <div class="panel-header">
+      <span>SAMPLER CONTROLLER</span>
+      <span>PONDASHI SOUNDBOARD</span>
     </div>
+    <header class="header-bar">
+      <h1>ポン出しパッド</h1>
+      <label class="ctl">音量 <input id="master" type="range" min="0" max="1" step="0.01" value="1"></label>
+      <button id="stopAll" class="btn-strong">■ 全停止</button>
+      <div class="sep"></div>
+      <button id="fsSave" title="選択したフォルダに設定と音声を個別ファイルで保存">📁 フォルダ保存</button>
+      <button id="fsLoad" title="フォルダから設定と音声を読み込み（無いファイルは一覧表示）">📂 フォルダ読込</button>
+      <button id="expZip" title="設定と音声ファイル本体をZIPにまとめてダウンロード（他PCへの持ち出し用）">📦 ZIP書き出し</button>
+      <button id="impZip" title="ZIPから設定と音声を復元">📦 ZIP読み込み</button>
+      <input type="file" id="impFile" accept=".zip,application/zip" hidden>
+      <div class="sep"></div>
+      <button id="reset">全消去</button>
+    </header>
+  </div>
 
-    <label for="off">再生オフセット（開始位置・秒）</label>
-    <input type="number" id="off" min="0" step="0.01" inputmode="decimal">
+  <div class="timer-bar">
+    <div id="now">--:--:--</div>
+    <div class="tm">
+      <label>タイマー:</label>
+      <input type="number" id="tmM" min="0" max="999" value="5" inputmode="numeric">分
+      <input type="number" id="tmS" min="0" max="59" value="0" inputmode="numeric">秒
+      <span id="tmD">05:00</span>
+      <button id="tmGo">開始</button>
+      <button id="tmRs">リセット</button>
+    </div>
+  </div>
 
-    <label for="ae">再生自動終了（秒・0で無効）</label>
-    <input type="number" id="ae" min="0" step="0.01" inputmode="decimal">
+  <div class="layout">
+    <div id="grid"></div>
 
-    <div class="khead"><span>連動（他のパッドを操作）</span><button id="kadd" type="button">＋追加</button></div>
-    <div class="khelp">このパッドを再生したとき、他のパッドを止めたり鳴らしたりします。</div>
-    <div id="lk"></div>
+    <aside id="pp">
+      <div class="panel-header">
+        <span id="ppt">パッド設定</span>
+      </div>
+      <div class="sub" id="pps">パッドの ⚙ で選択</div>
 
-    <label for="fl">音声・動画ファイル</label>
-    <input type="file" id="fl" accept="audio/*,video/*">
-    <div id="fn"></div>
+      <label for="nm">名前</label>
+      <input type="text" id="nm" maxlength="30" placeholder="例: 拍手">
 
-    <button id="clr" class="danger clrbtn">ファイルを消去</button>
-    <button id="del" class="danger clrbtn">このパッドを削除</button>
-  </aside>
+      <label>色</label>
+      <div class="sw" id="sw"></div>
+      <label class="cc">カスタム色 <input type="color" id="cc" value="#ffffff"></label>
+
+      <label for="pv">音量</label>
+      <input type="range" id="pv" min="0" max="1" step="0.01">
+
+      <label><input type="checkbox" id="lp"> ループ再生</label>
+
+      <div class="two">
+        <div><label for="fi">フェードイン(秒)</label><input type="number" id="fi" min="0" max="30" step="0.01" inputmode="decimal"></div>
+        <div><label for="fo">フェードアウト(秒)</label><input type="number" id="fo" min="0" max="30" step="0.01" inputmode="decimal"></div>
+      </div>
+
+      <label for="off">開始オフセット (秒)</label>
+      <input type="number" id="off" min="0" step="0.01" inputmode="decimal">
+
+      <label for="ae">自動終了 (秒・0で無効)</label>
+      <input type="number" id="ae" min="0" step="0.01" inputmode="decimal">
+
+      <div class="khead"><span>連動（他のパッド操作）</span><button id="kadd" type="button">＋追加</button></div>
+      <div class="khelp">このパッドを再生したとき、他のパッドを止めたり鳴らしたりします。</div>
+      <div id="lk"></div>
+
+      <label for="fl">音声・動画ファイル</label>
+      <input type="file" id="fl" accept="audio/*,video/*">
+      <div id="fn"></div>
+
+      <button id="clr" class="clrbtn">ファイルを消去</button>
+      <button id="del" class="clrbtn">このパッドを削除</button>
+    </aside>
+  </div>
+
+  <div class="hint">
+    パッド本体タップ or ▶で再生（ループ中は再生ボタンで停止）／ ■ でフェードアウト停止／ ⚙ でプロパティを表示／ ＋ でパッド追加<br>
+    キーボード: 1 2 3 4 / q w e r / a s d f / z x c v（先頭16個）、Space で全停止<br>
+    「📁フォルダ保存／読込」は選んだフォルダに設定＋音声を個別ファイルとして保存します（対応ブラウザのみ）。<br>
+    「📦ZIP書き出し／読み込み」は音声ファイルをそのままの形式でZIPにまとめます。他のPCへ音声ファイルごと持ち出したいときはこちら。
+  </div>
+  <div id="toast"></div>
 </div>
-
-<p class="hint">
-  パッド本体タップ or ▶で再生（ループ中は再生ボタンで停止）／ ■ でフェードアウト停止／ ⚙ でプロパティを表示／ ＋ でパッド追加<br>
-  キーボード: 1 2 3 4 / q w e r / a s d f / z x c v（先頭16個）、Space で全停止<br>
-  「📁フォルダ保存／読込」は選んだフォルダに設定＋音声を個別ファイルとして保存します（対応ブラウザのみ）。読込時、フォルダ内に見つからないファイルは一覧で通知します。<br>
-  「📦ZIP書き出し／読み込み」は音声ファイルをそのままの形式でZIPにまとめます。他のPCへ音声ファイルごと持ち出したいときはこちら（全ブラウザで使用可。解凍すれば音声ファイル単体としても取り出せます）。
-</p>
-<div id="toast"></div>
-
 <script>
 const KEY='ponde-pad:v1', DBN='ponde-pad';
 const COLORS=['#e5484d','#f76b15','#f5a524','#30a46c','#12a594','#0090ff','#6e56cf','#d6409f'];
