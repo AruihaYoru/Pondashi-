@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="写真を5階調のドット柄(スクリーントーン風)や白黒ディザに変換するツール。画像は端末内だけで処理されます。">
+<meta name="color-scheme" content="only light">
+<title>トーン変換ツール</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+:root { padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+body { background: #fff; color: #000; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Hiragino Sans", "Noto Sans JP", Roboto, sans-serif; padding: 24px; display: flex; justify-content: center; }
+.app { width: 100%; max-width: 960px; display: flex; flex-direction: column; gap: 16px; }
+h1 { font-size: 16px; font-weight: 700; }
+h2 { font-size: 13px; font-weight: 700; text-transform: uppercase; margin-bottom: 8px; letter-spacing: .05em; }
+.panel { background: #fff; border: 1px solid #000; padding: 14px 16px; }
+.panel-header { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+p.note { font-size: 12px; line-height: 1.5; margin-top: 6px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
+input, select, button { background: #fff; color: #000; border: 1px solid #000; font: inherit; font-size: 12px; border-radius: 0; }
+input[type=text], input[type=number], select { padding: 5px 8px; }
+input[type=number] { width: 72px; }
+input[type=range] { border: 0; accent-color: #000; width: 100%; }
+input[type=color] { width: 44px; height: 28px; padding: 0; }
+button { padding: 5px 12px; cursor: pointer; font-weight: 600; transition: background .1s, color .1s; }
+button:hover:not(:disabled) { background: #000; color: #fff; }
+button:disabled { opacity: .4; cursor: default; }
+button.btn-strong { background: #000; color: #fff; }
+button.btn-strong:hover:not(:disabled) { background: #fff; color: #000; }
+:focus-visible { outline: 2px solid #000; outline-offset: 2px; }
+table { width: 100%; border-collapse: collapse; }
+td { padding: 4px 6px; vertical-align: middle; }
+td.l { white-space: nowrap; width: 25%; font-size: 12px; font-weight: 600; }
+td.v { width: 48px; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+select { max-width: 100%; }
+details { border: 1px solid #000; padding: 10px 14px; background: #fff; }
+summary { font-size: 12px; font-weight: 700; cursor: pointer; text-transform: uppercase; letter-spacing: .05em; }
+#msg { font-size: 12px; font-weight: 700; margin-left: 8px; }
+ul#explain { padding-left: 20px; font-size: 12px; line-height: 1.6; margin-top: 6px; }
+.stage { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 4px; }
+@media (max-width: 560px) { .stage { grid-template-columns: 1fr; } }
+figure { margin: 0; }
+figcaption { font-size: 12px; font-weight: 600; margin-bottom: 4px; }
+canvas { width: 100%; height: auto; display: block; border: 1px solid #000; background: #eee; }
+.scroll { overflow: auto; }
+.actual { grid-template-columns: 1fr !important; }
+.actual canvas { width: auto; max-width: none; image-rendering: pixelated; }
+.empty { padding: 32px 12px; text-align: center; border: 1px dashed #000; font-size: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="panel">
+    <div class="panel-header"><span>IMAGE TONE TOOL</span><span>CONVERTER</span></div>
+    <h1>トーン変換ツール</h1>
+    <p class="note">写真を、濃さごとのドット柄(スクリーントーン風)や白黒ディザに変換します。画像はこの端末内だけで処理され、送信されません。</p>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><span>CONVERSION CONDITIONS</span></div>
+    <table>
+      <tr><td class="l"><label for="file">画像を選ぶ</label></td><td colspan="2"><input id="file" type="file" accept="image/*"></td></tr>
+      <tr><td class="l"><label for="algo">方式</label></td><td colspan="2">
+        <select id="algo">
+          <option value="tile5" selected>トーン(5階調+4×4ドット柄)</option>
+          <option value="bayer4">Bayer 4×4(格子状)</option>
+          <option value="bayer8">Bayer 8×8(細かい格子)</option>
+          <option value="fs">Floyd–Steinberg(誤差拡散)</option>
+          <option value="thr">しきい値のみ(ディザなし)</option>
+        </select></td></tr>
+      <tr><td class="l"><label for="px">ドットの大きさ</label></td><td><input id="px" type="range" min="0.25" max="8" step="0.25" value="1"></td><td class="v" id="pxv">1</td></tr>
+      <tr><td class="l"><label for="br">明るさ</label></td><td><input id="br" type="range" min="-100" max="100" value="0"></td><td class="v" id="brv">0</td></tr>
+      <tr><td class="l"><label for="ct">コントラスト</label></td><td><input id="ct" type="range" min="-100" max="100" value="0"></td><td class="v" id="ctv">0</td></tr>
+      <tr><td class="l"><label for="gm">ガンマ</label></td><td><input id="gm" type="range" min="40" max="250" value="100"></td><td class="v" id="gmv">1.0</td></tr>
+      <tr><td class="l"><label for="lv">階調数(トーン)</label></td><td><input id="lv" type="range" min="2" max="17" value="5"></td><td class="v" id="lvv">5</td></tr>
+      <tr><td class="l">プレビュー</td><td colspan="2"><label style="font-size:12px"><input id="act" type="checkbox"> 等倍で表示(ドットをそのまま見る)</label></td></tr>
+      <tr><td class="l">色(暗 / 明)</td><td colspan="2"><div class="row"><input id="c0" type="color" value="#000000" aria-label="暗い色"><input id="c1" type="color" value="#ffffff" aria-label="明るい色"></div></td></tr>
+    </table>
+    <p class="note">ドットの大きさ1は元画像の1ピクセルに当たり、トーン方式でも同じです。0.25〜0.75にすると、元より細かいドットで変換します(0.5なら縦横2倍の解像度、出力は最大約4096px幅)。階調数を5以外にすると、白いドットの数が段階的に増える柄を自動で作ります。画面での縮小表示でドットが潰れて見える場合は、「等倍で表示」を入れると元のドットのまま確認できます。保存したPNGは影響を受けません。</p>
+    <details style="margin-top: 12px;">
+      <summary>トーンのしきい値 (詳細設定)</summary>
+      <p class="note">明るさ(0〜255)がこの値を超えるごとに、濃さが1段階上がります。</p>
+      <div class="row" style="margin-top: 8px;">
+        <input id="t1" type="number" min="0" max="255" value="38" aria-label="しきい値1">
+        <input id="t2" type="number" min="0" max="255" value="78" aria-label="しきい値2">
+        <input id="t3" type="number" min="0" max="255" value="132" aria-label="しきい値3">
+        <input id="t4" type="number" min="0" max="255" value="192" aria-label="しきい値4">
+      </div>
+    </details>
+  </div>
+
+  <div class="panel">
+    <div class="panel-header"><span>OUTPUT RESULT</span></div>
+    <h2>できあがり</h2>
+    <div id="empty" class="empty">上の「画像を選ぶ」から写真を読み込んでください。</div>
+    <div id="stage" class="stage" hidden>
+      <figure><figcaption>元の画像</figcaption><div class="scroll"><canvas id="src"></canvas></div></figure>
+      <figure><figcaption>変換後</figcaption><div class="scroll"><canvas id="out"></canvas></div></figure>
+    </div>
+    <p class="row" style="margin-top: 10px;">
+      <button type="button" id="save" class="btn-strong" disabled>PNGで保存</button>
+      <button type="button" id="reset">設定をリセット</button>
+      <span id="msg"></span>
+    </p>
+    <p style="margin-top: 12px; font-size: 12px; font-weight: 700;">意味の解説:</p>
+    <ul id="explain"></ul>
+  </div>
+</div>
+<script>
+(function () {
+  var $ = function (i) { return document.getElementById(i); };
+  var img = null, src = $('src'), out = $('out');
+  function bayer(n) { if (n === 2) return [[0, 2], [3, 1]]; var p = bayer(n / 2), m = [], i, j;
+    for (i = 0; i < n; i++) { m[i] = []; for (j = 0; j < n; j++) { var b = p[i % (n / 2)][j % (n / 2)] * 4; m[i][j] = b + [[0, 2], [3, 1]][Math.floor(i / (n / 2))][Math.floor(j / (n / 2))]; } } return m; }
+  var B4 = bayer(4), B8 = bayer(8);
+  function hex(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
+  var DEF = { algo: 'tile5', lv: 5, px: 1, br: 0, ct: 0, gm: 100, c0: '#000000', c1: '#ffffff', t1: 38, t2: 78, t3: 132, t4: 192 };
+  var NAMES = { tile5: 'トーン(5階調+4×4ドット柄)', bayer4: 'Bayer 4×4', bayer8: 'Bayer 8×8', fs: 'Floyd–Steinberg', thr: 'しきい値のみ' };
+  function labels() {
+    $('pxv').textContent = $('px').value; $('brv').textContent = $('br').value;
+    $('ctv').textContent = $('ct').value; $('gmv').textContent = ($('gm').value / 100).toFixed(1);
+    $('lvv').textContent = $('lv').value;
+  }
+  function explain() {
+    var a = $('algo').value, l = ['方式: ' + NAMES[a]];
+    if (a === 'tile5') l.push('写真を' + $('lv').value + '段階の濃さに分け、濃さごとに決まった4×4のドット柄を並べます。(5段階は1枚目と同じ柄)');
+    else l.push('明るさを白か黒の点の密度で表します。ドットの大きさ: ' + $('px').value);
+    l.push('明るさ ' + $('br').value + ' / コントラスト ' + $('ct').value + ' / ガンマ ' + ($('gm').value / 100).toFixed(1));
+    var ul = $('explain'); ul.innerHTML = '';
+    l.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+  }
+  ['px', 'br', 'ct', 'gm', 'lv', 'act', 'algo', 'c0', 'c1', 't1', 't2', 't3', 't4'].forEach(function (id) {
+    $(id).addEventListener('input', function () { labels(); render(); });
+  });
+  $('reset').addEventListener('click', function () {
+    Object.keys(DEF).forEach(function (k) { $(k).value = DEF[k]; });
+    labels(); render(); say('リセットしました');
+  });
+  function say(t) { $('msg').textContent = t; setTimeout(function () { $('msg').textContent = ''; }, 1800); }
+  $('file').addEventListener('change', function (e) {
+    var f = e.target.files[0]; if (!f) return;
+    var im = new Image();
+    im.onload = function () { img = im; URL.revokeObjectURL(im.src); $('empty').hidden = true; $('stage').hidden = false; $('save').disabled = false; render(); };
+    im.onerror = function () { say('画像を読み込めませんでした'); };
+    im.src = URL.createObjectURL(f);
+  });
+  function view(d) {
+    var on = $('act').checked;
+    $('stage').classList.toggle('actual', on);
+    out.style.width = on ? out.width * Math.max(d, 1) + 'px' : '';
+  }
+  function render() {
+    explain();
+    if (!img) return;
+    var algo0 = $('algo').value, pz = +$('px').value, d = algo0 === 'tile5' ? 4 * pz : pz, maxW = Math.min(algo0 === 'tile5' ? 2048 : 1400, Math.round(4096 * pz));
+    var W = Math.min(img.naturalWidth, maxW), H = Math.round(img.naturalHeight * W / img.naturalWidth);
+    src.width = W; src.height = H; src.getContext('2d').drawImage(img, 0, 0, W, H);
+    var w = Math.max(1, Math.round(W / d)), h = Math.max(1, Math.round(H / d));
+    var tmp = document.createElement('canvas'); tmp.width = w; tmp.height = h;
+    var tc = tmp.getContext('2d'); tc.imageSmoothingQuality = 'high'; tc.drawImage(img, 0, 0, w, h);
+    var px = tc.getImageData(0, 0, w, h), data = px.data;
+    var br = +$('br').value * 2.55, ct = +$('ct').value, g = 1 / ($('gm').value / 100);
+    var cf = (259 * (ct + 255)) / (255 * (259 - ct));
+    var L = new Float32Array(w * h), i, x, y;
+    for (i = 0; i < w * h; i++) {
+      var v = 0.299 * data[i * 4] + 0.587 * data[i * 4 + 1] + 0.114 * data[i * 4 + 2];
+      v = cf * (v - 128) + 128 + br; v = Math.max(0, Math.min(255, v));
+      L[i] = 255 * Math.pow(v / 255, g);
+    }
+    var a = hex($('c0').value), b = hex($('c1').value);
+    if (algo0 === 'tile5') {
+      var N = +$('lv').value, tiles, th = [], j;
+      var t5 = [+$('t1').value, +$('t2').value, +$('t3').value, +$('t4').value];
+      if (N === 5) {
+        tiles = [['0gg0', 'g00g', 'g00g', '0gg0'], ['0gg0', 'W00W', 'W00W', '0gg0'], ['0WW0', 'W00W', 'W00W', '0WW0'], ['0WWW', 'W0WW', 'WW0W', 'WWW0'], ['WWWW', 'WWWW', 'WWWW', 'WWWW']];
+        th = t5;
+      } else {
+        var an = [[0, 0], [0.5, t5[0]], [1.5, t5[1]], [2.5, t5[2]], [3.5, t5[3]], [4, 255]];
+        tiles = [];
+        for (j = 0; j < N; j++) {
+          var cnt = Math.round(j / (N - 1) * 16), tl = [], r, cc;
+          for (r = 0; r < 4; r++) { var s = ''; for (cc = 0; cc < 4; cc++) s += B4[r][cc] < cnt ? 'W' : '0'; tl.push(s); }
+          tiles.push(tl);
+        }
+        for (j = 0; j < N - 1; j++) {
+          var sv = (j + 0.5) * 4 / (N - 1), m = 0;
+          while (m < 4 && sv > an[m + 1][0]) m++;
+          th.push(an[m][1] + (an[m + 1][1] - an[m][1]) * (sv - an[m][0]) / (an[m + 1][0] - an[m][0]));
+        }
+      }
+      
+      var cm = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+      out.width = w * 4; out.height = h * 4;
+      var im2 = out.getContext('2d').createImageData(w * 4, h * 4), dd = im2.data;
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+        var lv = 0, k, tx, ty;
+        for (k = 0; k < N - 1; k++) if (L[y * w + x] >= th[k]) lv++;
+        for (ty = 0; ty < 4; ty++) for (tx = 0; tx < 4; tx++) {
+          var ch = tiles[lv][ty][tx], col = ch === '0' ? a : ch === 'W' ? b : cm, p = ((y * 4 + ty) * w * 4 + x * 4 + tx) * 4;
+          dd[p] = col[0]; dd[p + 1] = col[1]; dd[p + 2] = col[2]; dd[p + 3] = 255;
+        }
+      }
+      out.getContext('2d').putImageData(im2, 0, 0); view(1); return;
+    }
+    var bit = new Uint8Array(w * h);
+    if (algo0 === 'fs') {
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+        i = y * w + x; var o = L[i], n = o < 128 ? 0 : 255; bit[i] = n ? 1 : 0; var e = o - n;
+        if (x + 1 < w) L[i + 1] += e * 7 / 16;
+        if (y + 1 < h) { if (x > 0) L[i + w - 1] += e * 3 / 16; L[i + w] += e * 5 / 16; if (x + 1 < w) L[i + w + 1] += e / 16; }
+      }
+    } else if (algo0 === 'thr') {
+      for (i = 0; i < w * h; i++) bit[i] = L[i] >= 128 ? 1 : 0;
+    } else {
+      var M = algo0 === 'bayer4' ? B4 : B8, n2 = M.length, den = n2 * n2;
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) { i = y * w + x; bit[i] = L[i] > (M[y % n2][x % n2] + 0.5) / den * 255 ? 1 : 0; }
+    }
+    for (i = 0; i < w * h; i++) { var c = bit[i] ? b : a; data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255; }
+    out.width = w; out.height = h; out.getContext('2d').putImageData(px, 0, 0); view(d);
+  }
+  $('save').addEventListener('click', function () {
+    if (!img) return;
+    var d = $('algo').value === 'tile5' ? 1 : Math.max(1, +$('px').value);
+    var big = document.createElement('canvas'); big.width = out.width * d; big.height = out.height * d;
+    var c = big.getContext('2d'); c.imageSmoothingEnabled = false; c.drawImage(out, 0, 0, big.width, big.height);
+    big.toBlob(function (bl) { var a = document.createElement('a'); a.href = URL.createObjectURL(bl); a.download = 'tone.png'; a.click(); }, 'image/png');
+  });
+  labels(); explain();
+})();
+</script>
+</body>
+</html>
