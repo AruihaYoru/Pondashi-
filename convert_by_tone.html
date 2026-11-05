@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="description" content="写真を5階調のドット柄(スクリーントーン風)や白黒ディザに変換するツール。画像は端末内だけで処理されます。">
+<meta name="description" content="写真を5階調のドット柄(スクリーントーン風)や、25種類の白黒ディザに変換するツール。画像は端末内だけで処理されます。">
 <meta name="color-scheme" content="only light">
 <title>トーン変換ツール</title>
 <style>
@@ -63,17 +63,59 @@ canvas { width: 100%; height: auto; display: block; border: 1px solid #000; back
       <tr><td class="l"><label for="algo">方式</label></td><td colspan="2">
         <select id="algo">
           <option value="tile5" selected>トーン(5階調+4×4ドット柄)</option>
-          <option value="bayer4">Bayer 4×4(格子状)</option>
-          <option value="bayer8">Bayer 8×8(細かい格子)</option>
-          <option value="fs">Floyd–Steinberg(誤差拡散)</option>
-          <option value="thr">しきい値のみ(ディザなし)</option>
+          <optgroup label="規則的(Ordered)">
+            <option value="bayer2">Bayer 2×2(粗い格子)</option>
+            <option value="bayer4">Bayer 4×4(格子状)</option>
+            <option value="bayer8">Bayer 8×8(細かい格子)</option>
+            <option value="bayer16">Bayer 16×16(極細の格子)</option>
+            <option value="ign">干渉ノイズ(青色ノイズ風)</option>
+            <option value="rnd">ランダム(砂目)</option>
+            <option value="vac">青色ノイズ Void-and-Cluster(64×64)</option>
+          </optgroup>
+          <optgroup label="網点・線(印刷風)">
+            <option value="dot45">網点 45°(大)</option>
+            <option value="dot45s">網点 45°(小)</option>
+            <option value="dot15">網点 15°(大)</option>
+            <option value="line45">斜線スクリーン 45°</option>
+            <option value="line0">横線スクリーン</option>
+          </optgroup>
+          <optgroup label="誤差拡散(Error diffusion)">
+            <option value="fs">Floyd–Steinberg</option>
+            <option value="atk">Atkinson(ハイコントラスト)</option>
+            <option value="jjn">Jarvis–Judice–Ninke</option>
+            <option value="stucki">Stucki</option>
+            <option value="burkes">Burkes</option>
+            <option value="sierra">Sierra(3行)</option>
+            <option value="sierra2">Two-Row Sierra</option>
+            <option value="sierral">Sierra Lite(軽量)</option>
+            <option value="sf">Shiau–Fan(5近傍)</option>
+            <option value="sf4">Shiau–Fan(4近傍)</option>
+            <option value="fan">Fan</option>
+            <option value="ost">Ostromoukhov(可変係数・蛇行)</option>
+          </optgroup>
+          <optgroup label="論文系(その他)">
+            <option value="knuth">Knuth ドット拡散(8×8クラス)</option>
+            <option value="rie">Riemersma(ヒルベルト曲線)</option>
+            <option value="ee">輪郭強調 FS(Eschbach–Knox型)</option>
+            <option value="fsr">FS+ランダム係数(Ulichney型)</option>
+            <option value="ostn">Ostromoukhov+閾値ノイズ(Zhou–Fang風)</option>
+            <option value="dbs">DBS(反転+入れ替え・Bayerから)</option>
+            <option value="dbsf">DBS(Floyd–Steinbergから)</option>
+            <option value="dbsr">DBS(ランダムから育てる)</option>
+            <option value="dbs2">DBS(ぼかし大・遠目向き)</option>
+          </optgroup>
+          <optgroup label="その他">
+            <option value="thr">しきい値のみ(ディザなし)</option>
+          </optgroup>
         </select></td></tr>
       <tr><td class="l"><label for="px">ドットの大きさ</label></td><td><input id="px" type="range" min="0.25" max="8" step="0.25" value="1"></td><td class="v" id="pxv">1</td></tr>
       <tr><td class="l"><label for="br">明るさ</label></td><td><input id="br" type="range" min="-100" max="100" value="0"></td><td class="v" id="brv">0</td></tr>
       <tr><td class="l"><label for="ct">コントラスト</label></td><td><input id="ct" type="range" min="-100" max="100" value="0"></td><td class="v" id="ctv">0</td></tr>
       <tr><td class="l"><label for="gm">ガンマ</label></td><td><input id="gm" type="range" min="40" max="250" value="100"></td><td class="v" id="gmv">1.0</td></tr>
       <tr><td class="l"><label for="lv">階調数(トーン)</label></td><td><input id="lv" type="range" min="2" max="17" value="5"></td><td class="v" id="lvv">5</td></tr>
+      <tr><td class="l"><label for="kp">手法の強さ</label></td><td><input id="kp" type="range" min="0" max="100" value="50"></td><td class="v" id="kpv">50</td></tr>
       <tr><td class="l">プレビュー</td><td colspan="2"><label style="font-size:12px"><input id="act" type="checkbox"> 等倍で表示(ドットをそのまま見る)</label></td></tr>
+      <tr><td class="l">走査</td><td colspan="2"><label style="font-size:12px"><input id="sp" type="checkbox"> 蛇行走査(誤差拡散系。Ostromoukhovは常に蛇行)</label></td></tr>
       <tr><td class="l">色(暗 / 明)</td><td colspan="2"><div class="row"><input id="c0" type="color" value="#000000" aria-label="暗い色"><input id="c1" type="color" value="#ffffff" aria-label="明るい色"></div></td></tr>
     </table>
     <p class="note">ドットの大きさ1は元画像の1ピクセルに当たり、トーン方式でも同じです。0.25〜0.75にすると、元より細かいドットで変換します(0.5なら縦横2倍の解像度、出力は最大約4096px幅)。階調数を5以外にすると、白いドットの数が段階的に増える柄を自動で作ります。画面での縮小表示でドットが潰れて見える場合は、「等倍で表示」を入れると元のドットのまま確認できます。保存したPNGは影響を受けません。</p>
@@ -112,28 +154,110 @@ canvas { width: 100%; height: auto; display: block; border: 1px solid #000; back
   var img = null, src = $('src'), out = $('out');
   function bayer(n) { if (n === 2) return [[0, 2], [3, 1]]; var p = bayer(n / 2), m = [], i, j;
     for (i = 0; i < n; i++) { m[i] = []; for (j = 0; j < n; j++) { var b = p[i % (n / 2)][j % (n / 2)] * 4; m[i][j] = b + [[0, 2], [3, 1]][Math.floor(i / (n / 2))][Math.floor(j / (n / 2))]; } } return m; }
-  var B4 = bayer(4), B8 = bayer(8);
+  var B2 = bayer(2), B4 = bayer(4), B8 = bayer(8), B16 = bayer(16);
+  function bf(M) { var n = M.length, d = n * n; return function (x, y) { return (M[y % n][x % n] + 0.5) / d; }; }
+  function scr(p, deg, line) {
+    var r = deg * Math.PI / 180, c = Math.cos(r), s = Math.sin(r), T = 2 * Math.PI / p;
+    return function (x, y) { var u = (x * c + y * s) * T, v = (-x * s + y * c) * T;
+      return line ? Math.abs(2 * fr(((x + 0.5) * c + (y + 0.5) * s) / p) - 1) : (Math.cos(u) + Math.cos(v)) / 4 + 0.5; };
+  }
+  function fr(v) { return v - Math.floor(v); }
+  // 規則的に並ぶしきい値(0〜1)を返す方式
+  var ORD = {
+    bayer2: bf(B2), bayer4: bf(B4), bayer8: bf(B8), bayer16: bf(B16),
+    ign: function (x, y) { return fr(52.9829189 * fr(0.06711056 * x + 0.00583715 * y)); },
+    rnd: function (x, y) { return fr(Math.sin(x * 12.9898 + y * 78.233) * 43758.5453); },
+    dot45: scr(8, 45), dot45s: scr(4, 45), dot15: scr(8, 15),
+    line45: scr(8, 45, true), line0: scr(8, 90, true)
+  };
+  // 誤差拡散のカーネル: K(分母, 同じ行の右隣, 1行下, 2行下)
+  function K(d, a, b, c) {
+    var k = [];
+    a.forEach(function (w, i) { k.push([i + 1, 0, w / d]); });
+    [b, c].forEach(function (r, j) { if (r) r.forEach(function (w, i) { if (w) k.push([i - (r.length >> 1), j + 1, w / d]); }); });
+    return k;
+  }
+  var ED = {
+    fs: K(16, [7], [3, 5, 1]),
+    atk: K(8, [1, 1], [1, 1, 1], [1]),
+    jjn: K(48, [7, 5], [3, 5, 7, 5, 3], [1, 3, 5, 3, 1]),
+    stucki: K(42, [8, 4], [2, 4, 8, 4, 2], [1, 2, 4, 2, 1]),
+    burkes: K(32, [8, 4], [2, 4, 8, 4, 2]),
+    sierra: K(32, [5, 3], [2, 4, 5, 4, 2], [0, 2, 3, 2, 0]),
+    sierra2: K(16, [4, 3], [1, 2, 3, 2, 1]),
+    sierral: K(4, [2], [1, 1]),
+    sf: K(16, [8], [1, 1, 2, 4, 0, 0, 0]),
+    sf4: K(8, [4], [1, 1, 2, 0, 0]),
+    fan: K(16, [7], [1, 3, 5, 0, 0])
+  };
+
+  // Ostromoukhov 2001 (SIGGRAPH) Appendix I: 強度0〜127の係数(右, 左下, 下)。128〜255は 255-i で折り返す
+  var OSTT = [];
+  ('13,0,5*2/21,0,10/7,0,4/8,0,5/47,3,28/23,3,13/15,3,8/22,6,11/43,15,20/7,3,3/501,224,211/249,116,103/165,80,67/123,62,49/489,256,191/81,44,31/483,272,181/60,35,22/53,32,19/237,148,83/471,304,161/3,2,1/481,314,185/354,226,155/1389,866,685/227,138,125/267,158,163/327,188,220/61,34,45/627,338,505/1227,638,1075/20,10,19/1937,1000,1767/977,520,855/657,360,551/71,40,57/2005,1160,1539/337,200,247/2039,1240,1425/257,160,171/691,440,437/1045,680,627/301,200,171/177,120,95/2141,1480,1083/1079,760,513/725,520,323/137,100,57/2209,1640,855/53,40,19/2243,1720,741/565,440,171/759,600,209/1147,920,285/2311,1880,513/97,80,19/335,280,57/1181,1000,171/793,680,95/599,520,57/2413,2120,171/405,360,19/2447,2200,57/11,10,0/158,151,3/178,179,7/1030,1091,63/248,277,21/318,375,35/458,571,63/878,1159,147/5,7,1/172,181,37/97,76,22/72,41,17/119,47,29/4,1,1*9/65,18,17/95,29,26/185,62,53/30,11,9/35,14,11/85,37,28/55,26,19/80,41,29/155,86,59/5,3,2*13/305,176,119/155,86,59/105,56,39/80,41,29/65,32,23/55,26,19/335,152,113/85,37,28/115,48,37/35,14,11/355,136,109/30,11,9/365,128,107/185,62,53/25,8,7/95,29,26/385,112,103/65,18,17/395,104,101/4,1,1').split('/').forEach(function (e) {
+    var p = e.split('*'), t = p[0].split(',').map(Number), c = p[1] ? +p[1] : 1;
+    while (c--) OSTT.push(t);
+  });
+  // Knuth 1987 ドット拡散の8×8クラス行列
+  var KC = [[34,48,40,32,29,15,23,31],[42,58,56,53,21,5,7,10],[50,62,61,45,13,1,2,18],[38,46,54,37,25,17,9,26],[28,14,22,30,35,49,41,33],[20,4,6,11,43,59,57,52],[12,0,3,19,51,63,60,44],[24,16,8,27,39,47,55,36]];
+  // Ulichney 1993 Void-and-Cluster: ガウス(σ=1.5)で空隙とかたまりを探し、ランク順にしきい値を作る
+  function vac(n) {
+    var N = n * n, R = 6, S = 1.5, g = [], dy, dx, bp = new Uint8Array(N), E = new Float32Array(N), r = new Float32Array(N), seed = 12345, i, k, c, v, p;
+    for (dy = -R; dy <= R; dy++) for (dx = -R; dx <= R; dx++) g.push([dx, dy, Math.exp(-(dx * dx + dy * dy) / (2 * S * S))]);
+    function splat(q, s) { var px = q % n, py = (q / n) | 0, j; for (j = 0; j < g.length; j++) E[((py + g[j][1] + n) % n) * n + (px + g[j][0] + n) % n] += s * g[j][2]; }
+    function pick(val, hi) { var best = -1, bv = 0, j; for (j = 0; j < N; j++) if (bp[j] === val && (best < 0 || (hi ? E[j] > bv : E[j] < bv))) { best = j; bv = E[j]; } return best; }
+    var ones = Math.round(N / 10);
+    for (i = 0; i < ones;) { seed = (Math.imul(seed, 1103515245) + 12345) & 0x7fffffff; p = seed % N; if (!bp[p]) { bp[p] = 1; splat(p, 1); i++; } }
+    for (k = 0; k < N * 4; k++) { c = pick(1, true); bp[c] = 0; splat(c, -1); v = pick(0, false); bp[v] = 1; splat(v, 1); if (v === c) break; }
+    var bp0 = bp.slice(), E0 = E.slice();
+    for (k = ones; k > 0; k--) { c = pick(1, true); r[c] = k - 1; bp[c] = 0; splat(c, -1); }
+    bp.set(bp0); E.set(E0);
+    for (k = ones; k < N; k++) { v = pick(0, false); r[v] = k; bp[v] = 1; splat(v, 1); }
+    return function (x, y) { return (r[(y % n) * n + x % n] + 0.5) / N; };
+  }
+  var VAC = null;
+  ORD.vac = function (x, y) { if (!VAC) VAC = vac(64); return VAC(x, y); };
   function hex(h) { return [parseInt(h.slice(1, 3), 16), parseInt(h.slice(3, 5), 16), parseInt(h.slice(5, 7), 16)]; }
-  var DEF = { algo: 'tile5', lv: 5, px: 1, br: 0, ct: 0, gm: 100, c0: '#000000', c1: '#ffffff', t1: 38, t2: 78, t3: 132, t4: 192 };
-  var NAMES = { tile5: 'トーン(5階調+4×4ドット柄)', bayer4: 'Bayer 4×4', bayer8: 'Bayer 8×8', fs: 'Floyd–Steinberg', thr: 'しきい値のみ' };
+  var DEF = { algo: 'tile5', lv: 5, px: 1, br: 0, ct: 0, gm: 100, c0: '#000000', c1: '#ffffff', t1: 38, t2: 78, t3: 132, t4: 192, kp: 50 };
+  var HELP = {
+    ord: '決まった並びのしきい値と明るさを比べて白黒を決めます。高速で、規則的な模様になります。',
+    ign: '格子模様が出にくい、粒のそろったノイズでしきい値を決めます。',
+    rnd: 'しきい値をランダムにします。フィルムの粒のような砂目になります。',
+    dot: '印刷の網点のように、明るさに応じて黒い点の大きさが変わります。',
+    line: '印刷の線スクリーンのように、明るさに応じて線の太さが変わります。',
+    ed: '白黒にしたときの「ずれ」を周りのピクセルに配って、全体の明るさを保ちます。',
+    thr: '明るさが半分を超えたら白、それ以外は黒にするだけです。',
+    vac: 'Ulichney(1993)のVoid-and-Cluster法で作った64×64のしきい値表を使います。点が偏らず、誤差拡散に近い青色ノイズの質感になります。',
+    knuth: 'Knuth(1987)のドット拡散です。8×8のクラス番号の順に処理し、番号が大きい隣へだけ誤差を配ります。並列処理向きで、規則的な粒が出ます。',
+    rie: 'Riemersma法です。ヒルベルト曲線の順にたどり、直前16画素ぶんの誤差だけを指数的に重みづけして使います。',
+    ee: 'Floyd–Steinbergのしきい値を入力の明るさに応じて動かし、輪郭を強調します(Knox & Eschbach 1993の考え方)。「手法の強さ」が強調の度合いで、50で標準です。',
+    fsr: 'Floyd–Steinbergの係数に毎回ランダムなゆらぎ(強さ50で±50%)を加え、蛇行して走査します。規則的な模様を崩します。',
+    ostn: 'Ostromoukhov法に、中間調ほど強いランダムなしきい値ゆらぎを足します。Zhou–Fang(2003)の発想を借りた自作の強さ配分です。',
+    dbs: '白黒の点を1つずつ反転、または隣と入れ替えてみて、人の目のぼかし(ガウス)で見た誤差が減るなら採用する、を収束するまで繰り返します(Analoui & Allebach 1992)。「手法の強さ」は最大パス数(強さ÷5回)です。重いため最大幅640pxです。',
+    dbsf: '白黒の点を1つずつ反転、または隣と入れ替えてみて、人の目のぼかし(ガウス)で見た誤差が減るなら採用する、を収束するまで繰り返します(Analoui & Allebach 1992)。「手法の強さ」は最大パス数(強さ÷5回)です。重いため最大幅640pxです。 出発点はFloyd–Steinbergです。',
+    dbsr: '白黒の点を1つずつ反転、または隣と入れ替えてみて、人の目のぼかし(ガウス)で見た誤差が減るなら採用する、を収束するまで繰り返します(Analoui & Allebach 1992)。「手法の強さ」は最大パス数(強さ÷5回)です。重いため最大幅640pxです。 出発点はランダムな点で、時間をかけて青色ノイズ状に育ちます。',
+    dbs2: '白黒の点を1つずつ反転、または隣と入れ替えてみて、人の目のぼかし(ガウス)で見た誤差が減るなら採用する、を収束するまで繰り返します(Analoui & Allebach 1992)。「手法の強さ」は最大パス数(強さ÷5回)です。重いため最大幅640pxです。 ぼかし幅を大きくした版で、遠くから見たときの粒の均一さを重視します。',
+    ost: 'Ostromoukhov(SIGGRAPH 2001)の可変係数法です。明るさごとに最適化した3つの係数を使い、蛇行しながら誤差を配ります。'
+  };
+  var KD = { thr: 1, ign: 1, rnd: 1, vac: 1, knuth: 1, rie: 1, ost: 1, ee: 1, fsr: 1, ostn: 1, dbs: 1, dbsf: 1, dbsr: 1, dbs2: 1 };
+  function kind(a) { return ED[a] ? 'ed' : KD[a] ? a : /^dot/.test(a) ? 'dot' : /^line/.test(a) ? 'line' : 'ord'; }
   function labels() {
     $('pxv').textContent = $('px').value; $('brv').textContent = $('br').value;
     $('ctv').textContent = $('ct').value; $('gmv').textContent = ($('gm').value / 100).toFixed(1);
-    $('lvv').textContent = $('lv').value;
+    $('lvv').textContent = $('lv').value; $('kpv').textContent = $('kp').value;
   }
   function explain() {
-    var a = $('algo').value, l = ['方式: ' + NAMES[a]];
+    var a = $('algo').value, l = ['方式: ' + $('algo').selectedOptions[0].textContent];
     if (a === 'tile5') l.push('写真を' + $('lv').value + '段階の濃さに分け、濃さごとに決まった4×4のドット柄を並べます。(5段階は1枚目と同じ柄)');
-    else l.push('明るさを白か黒の点の密度で表します。ドットの大きさ: ' + $('px').value);
+    else { l.push(HELP[kind(a)]); l.push('ドットの大きさ: ' + $('px').value); }
     l.push('明るさ ' + $('br').value + ' / コントラスト ' + $('ct').value + ' / ガンマ ' + ($('gm').value / 100).toFixed(1));
     var ul = $('explain'); ul.innerHTML = '';
     l.forEach(function (t) { var li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
   }
-  ['px', 'br', 'ct', 'gm', 'lv', 'act', 'algo', 'c0', 'c1', 't1', 't2', 't3', 't4'].forEach(function (id) {
+  ['px', 'br', 'ct', 'gm', 'lv', 'act', 'algo', 'c0', 'c1', 't1', 't2', 't3', 't4', 'sp', 'kp'].forEach(function (id) {
     $(id).addEventListener('input', function () { labels(); render(); });
   });
   $('reset').addEventListener('click', function () {
-    Object.keys(DEF).forEach(function (k) { $(k).value = DEF[k]; });
+    Object.keys(DEF).forEach(function (k) { $(k).value = DEF[k]; }); $('sp').checked = false;
     labels(); render(); say('リセットしました');
   });
   function say(t) { $('msg').textContent = t; setTimeout(function () { $('msg').textContent = ''; }, 1800); }
@@ -152,7 +276,7 @@ canvas { width: 100%; height: auto; display: block; border: 1px solid #000; back
   function render() {
     explain();
     if (!img) return;
-    var algo0 = $('algo').value, pz = +$('px').value, d = algo0 === 'tile5' ? 4 * pz : pz, maxW = Math.min(algo0 === 'tile5' ? 2048 : 1400, Math.round(4096 * pz));
+    var algo0 = $('algo').value, pz = +$('px').value, d = algo0 === 'tile5' ? 4 * pz : pz, maxW = Math.min(algo0 === 'tile5' ? 2048 : /^dbs/.test(algo0) ? 640 : 1400, Math.round(4096 * pz));
     var W = Math.min(img.naturalWidth, maxW), H = Math.round(img.naturalHeight * W / img.naturalWidth);
     src.width = W; src.height = H; src.getContext('2d').drawImage(img, 0, 0, W, H);
     var w = Math.max(1, Math.round(W / d)), h = Math.max(1, Math.round(H / d));
@@ -188,7 +312,7 @@ canvas { width: 100%; height: auto; display: block; border: 1px solid #000; back
           th.push(an[m][1] + (an[m + 1][1] - an[m][1]) * (sv - an[m][0]) / (an[m + 1][0] - an[m][0]));
         }
       }
-      
+
       var cm = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
       out.width = w * 4; out.height = h * 4;
       var im2 = out.getContext('2d').createImageData(w * 4, h * 4), dd = im2.data;
@@ -203,17 +327,121 @@ canvas { width: 100%; height: auto; display: block; border: 1px solid #000; back
       out.getContext('2d').putImageData(im2, 0, 0); view(1); return;
     }
     var bit = new Uint8Array(w * h);
-    if (algo0 === 'fs') {
+    if (ED[algo0] || algo0 === 'ost' || algo0 === 'ostn' || algo0 === 'ee' || algo0 === 'fsr') {
+      var isO = algo0 === 'ost' || algo0 === 'ostn', kk = +$('kp').value / 50, ker = ED[algo0] || (algo0 === 'ee' ? ED.fs : null), kl = ker ? ker.length : 0, q, nx, ny, sp = $('sp').checked || isO || algo0 === 'fsr', dir, xx, t, s2, ii, th, L0 = (isO || algo0 === 'ee') ? L.slice() : null;
+      var rn = function (j, z) { var u = Math.sin(j * 12.9898 + z * 78.233) * 43758.5453; return u - Math.floor(u); };
+      for (y = 0; y < h; y++) {
+        dir = sp && (y & 1) ? -1 : 1;
+        for (xx = 0; xx < w; xx++) {
+          x = dir > 0 ? xx : w - 1 - xx; i = y * w + x;
+          var o = L[i]; th = 128;
+          if (L0) { ii = Math.max(0, Math.min(255, Math.round(L0[i]))); if (ii > 127) ii = 255 - ii; }
+          if (algo0 === 'ee') th = 128 - kk * (L0[i] - 128);
+          else if (algo0 === 'ostn') th = 128 + (rn(i, 1) + rn(i, 2) - rn(i, 3) - rn(i, 4)) * 0.375 * 60 * kk * ii / 127;
+          var n = o >= th ? 255 : 0; bit[i] = n ? 1 : 0; var e = o - n;
+          if (algo0 === 'fsr') {
+            var f1 = 7 * (1 + kk * (2 * rn(i, 5) - 1)), f2 = 3 * (1 + kk * (2 * rn(i, 6) - 1)), f3 = 5 * (1 + kk * (2 * rn(i, 7) - 1)), f4 = 1 * (1 + kk * (2 * rn(i, 8) - 1)), fs = f1 + f2 + f3 + f4;
+            nx = x + dir; if (nx >= 0 && nx < w) L[i + dir] += e * f1 / fs;
+            if (y + 1 < h) { nx = x - dir; if (nx >= 0 && nx < w) L[i + w - dir] += e * f2 / fs; L[i + w] += e * f3 / fs; nx = x + dir; if (nx >= 0 && nx < w) L[i + w + dir] += e * f4 / fs; }
+          } else if (ker) {
+            for (q = 0; q < kl; q++) {
+              nx = x + dir * ker[q][0]; ny = y + ker[q][1];
+              if (nx >= 0 && nx < w && ny < h) L[ny * w + nx] += e * ker[q][2];
+            }
+          } else {
+            t = OSTT[ii]; s2 = t[0] + t[1] + t[2];
+            nx = x + dir; if (nx >= 0 && nx < w) L[i + dir] += e * t[0] / s2;
+            if (y + 1 < h) { nx = x - dir; if (nx >= 0 && nx < w) L[i + w - dir] += e * t[1] / s2; L[i + w] += e * t[2] / s2; }
+          }
+        }
+      }
+    } else if (algo0 === 'knuth') {
+      var c0, cy, cx, ay, ax, dy2, dx2, ws, el, cp = [], o2, n3, e2, q2;
+      for (cy = 0; cy < 8; cy++) for (cx = 0; cx < 8; cx++) cp[KC[cy][cx]] = [cx, cy];
+      for (c0 = 0; c0 < 64; c0++) for (y = cp[c0][1]; y < h; y += 8) for (x = cp[c0][0]; x < w; x += 8) {
+        i = y * w + x; o2 = L[i]; n3 = o2 < 128 ? 0 : 255; bit[i] = n3 ? 1 : 0; e2 = o2 - n3; el = []; ws = 0;
+        for (dy2 = -1; dy2 <= 1; dy2++) for (dx2 = -1; dx2 <= 1; dx2++) {
+          ay = y + dy2; ax = x + dx2;
+          if ((!dx2 && !dy2) || ay < 0 || ay >= h || ax < 0 || ax >= w || KC[ay % 8][ax % 8] < c0) continue;
+          q2 = dx2 && dy2 ? 1 : 2; el.push([ay * w + ax, q2]); ws += q2;
+        }
+        for (q2 = 0; q2 < el.length; q2++) L[el[q2][0]] += e2 * el[q2][1] / ws;
+      }
+    } else if (algo0 === 'rie') {
+      var QS = 16, wt = [], qe = [], mm = Math.exp(Math.log(16) / (QS - 1)), vv = 1, N2 = 1, dd, t2, sx, sy, s3, rx, ry, ac, pv, ob, k0, tt;
+      for (k0 = 0; k0 < QS; k0++) { wt.push(Math.round(vv)); vv *= mm; qe.push(0); }
+      while (N2 < Math.max(w, h)) N2 *= 2;
+      for (dd = 0; dd < N2 * N2; dd++) {
+        t2 = dd; sx = 0; sy = 0;
+        for (s3 = 1; s3 < N2; s3 *= 2) {
+          rx = 1 & (t2 >> 1); ry = 1 & (t2 ^ rx);
+          if (ry === 0) { if (rx === 1) { sx = s3 - 1 - sx; sy = s3 - 1 - sy; } tt = sx; sx = sy; sy = tt; }
+          sx += s3 * rx; sy += s3 * ry; t2 >>= 2;
+        }
+        if (sx >= w || sy >= h) continue;
+        i = sy * w + sx; ac = 0;
+        for (k0 = 0; k0 < QS; k0++) ac += qe[k0] * wt[k0];
+        pv = L[i] + ac / 16; ob = pv > 127 ? 255 : 0; bit[i] = ob ? 1 : 0;
+        qe.shift(); qe.push(L[i] - ob);
+      }
+    } else if (/^dbs/.test(algo0)) {
+      // Analoui & Allebach 1992 のDBS: 誤差 e=f-g を人の目のフィルタh(ガウス)でぼかした二乗和を最小化する。
+      // G = (h*h) と e の相互相関 を持ち回り、反転/入れ替えの良し悪しをO(1)で判定する。
+      var sg = algo0 === 'dbs2' ? 2.2 : 1.3, HR = Math.ceil(sg * 2), AR = 2 * HR, AW = 2 * AR + 1, hw = 2 * HR + 1;
+      var hk2 = [], hs = 0, ac = new Float32Array(AW * AW), ac0, u1, u2, v1, v2, hv2, G = new Float32Array(w * h), ev = new Float32Array(w * h), passes = Math.max(1, Math.round(+$('kp').value / 5)), pas, chg, nb = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]], bq, bm, dv, dq, dl, qx, qy, qi, ds, gy, gx, kx, ky;
+      for (u1 = -HR; u1 <= HR; u1++) for (u2 = -HR; u2 <= HR; u2++) { hv2 = Math.exp(-(u1 * u1 + u2 * u2) / (2 * sg * sg)); hk2[(u2 + HR) * hw + u1 + HR] = hv2; hs += hv2; }
+      for (u1 = 0; u1 < hk2.length; u1++) hk2[u1] /= hs;
+      for (v1 = -AR; v1 <= AR; v1++) for (v2 = -AR; v2 <= AR; v2++) {
+        hv2 = 0;
+        for (u1 = -HR; u1 <= HR; u1++) for (u2 = -HR; u2 <= HR; u2++) {
+          if (Math.abs(u1 + v1) <= HR && Math.abs(u2 + v2) <= HR) hv2 += hk2[(u2 + HR) * hw + u1 + HR] * hk2[(u2 + v2 + HR) * hw + u1 + v1 + HR];
+        }
+        ac[(v2 + AR) * AW + v1 + AR] = hv2;
+      }
+      ac0 = ac[AR * AW + AR];
+      if (algo0 === 'dbsf') {
+        var Lc = L.slice();
+        for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+          i = y * w + x; var oo = Lc[i], nn = oo < 128 ? 0 : 255, ee = oo - nn; bit[i] = nn ? 1 : 0;
+          if (x + 1 < w) Lc[i + 1] += ee * 7 / 16;
+          if (y + 1 < h) { if (x > 0) Lc[i + w - 1] += ee * 3 / 16; Lc[i + w] += ee * 5 / 16; if (x + 1 < w) Lc[i + w + 1] += ee / 16; }
+        }
+      } else if (algo0 === 'dbsr') {
+        for (i = 0; i < w * h; i++) { var uu = Math.sin(i * 12.9898) * 43758.5453; bit[i] = L[i] > (uu - Math.floor(uu)) * 255 ? 1 : 0; }
+      } else {
+        for (y = 0; y < h; y++) for (x = 0; x < w; x++) { i = y * w + x; bit[i] = L[i] > ORD.bayer8(x, y) * 255 ? 1 : 0; }
+      }
+      for (i = 0; i < w * h; i++) ev[i] = L[i] / 255 - bit[i];
       for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
-        i = y * w + x; var o = L[i], n = o < 128 ? 0 : 255; bit[i] = n ? 1 : 0; var e = o - n;
-        if (x + 1 < w) L[i + 1] += e * 7 / 16;
-        if (y + 1 < h) { if (x > 0) L[i + w - 1] += e * 3 / 16; L[i + w] += e * 5 / 16; if (x + 1 < w) L[i + w + 1] += e / 16; }
+        hv2 = 0;
+        for (v2 = -AR; v2 <= AR; v2++) { gy = y + v2; if (gy < 0 || gy >= h) continue; for (v1 = -AR; v1 <= AR; v1++) { gx = x + v1; if (gx >= 0 && gx < w) hv2 += ac[(v2 + AR) * AW + v1 + AR] * ev[gy * w + gx]; } }
+        G[y * w + x] = hv2;
+      }
+      var applyD = function (px, py, d) {
+        for (ky = -AR; ky <= AR; ky++) { gy = py + ky; if (gy < 0 || gy >= h) continue; for (kx = -AR; kx <= AR; kx++) { gx = px + kx; if (gx >= 0 && gx < w) G[gy * w + gx] += d * ac[(ky + AR) * AW + kx + AR]; } }
+      };
+      for (pas = 0; pas < passes; pas++) {
+        chg = 0;
+        for (y = 0; y < h; y++) for (x = 0; x < w; x++) {
+          i = y * w + x; dv = bit[i] ? 1 : -1; dl = 2 * dv * G[i] + ac0; bm = -1;
+          for (q = 0; q < 8; q++) {
+            qx = x + nb[q][0]; qy = y + nb[q][1]; if (qx < 0 || qx >= w || qy < 0 || qy >= h) continue;
+            qi = qy * w + qx; if (bit[qi] === bit[i]) continue;
+            ds = 2 * dv * (G[i] - G[qi]) + 2 * ac0 - 2 * ac[(nb[q][1] + AR) * AW + nb[q][0] + AR];
+            if (ds < dl) { dl = ds; bm = q; }
+          }
+          if (dl < -1e-9) {
+            chg++; bit[i] ^= 1; applyD(x, y, dv);
+            if (bm >= 0) { qx = x + nb[bm][0]; qy = y + nb[bm][1]; qi = qy * w + qx; bit[qi] ^= 1; applyD(qx, qy, -dv); }
+          }
+        }
+        if (!chg) break;
       }
     } else if (algo0 === 'thr') {
       for (i = 0; i < w * h; i++) bit[i] = L[i] >= 128 ? 1 : 0;
     } else {
-      var M = algo0 === 'bayer4' ? B4 : B8, n2 = M.length, den = n2 * n2;
-      for (y = 0; y < h; y++) for (x = 0; x < w; x++) { i = y * w + x; bit[i] = L[i] > (M[y % n2][x % n2] + 0.5) / den * 255 ? 1 : 0; }
+      var f = ORD[algo0];
+      for (y = 0; y < h; y++) for (x = 0; x < w; x++) { i = y * w + x; bit[i] = L[i] > f(x, y) * 255 ? 1 : 0; }
     }
     for (i = 0; i < w * h; i++) { var c = bit[i] ? b : a; data[i * 4] = c[0]; data[i * 4 + 1] = c[1]; data[i * 4 + 2] = c[2]; data[i * 4 + 3] = 255; }
     out.width = w; out.height = h; out.getContext('2d').putImageData(px, 0, 0); view(d);
